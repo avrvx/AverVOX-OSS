@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "avrvx"
-version = "0.3.0"
+version = "0.3.1"
 description = "Give your LLMs a voice. Dictate, speak, and converse with any OpenAI-compatible LLM from a global hotkey on Linux."
 readme = "README.md"
 license = "MIT"
@@ -35,7 +35,7 @@ dependencies = [
 
 # PyPI publish target — free edition only. See LINKS.md for URL registry.
 [project.urls]
-Homepage = "https://avervoxpro.com/"
+Homepage = "https://github.com/avrvx/AverVOX-OSS"
 Repository = "https://github.com/avrvx/AverVOX-OSS"
 Issues     = "https://github.com/avrvx/AverVOX-OSS/issues"
 
