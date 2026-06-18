@@ -20,6 +20,8 @@ Add voice to any OpenAI-compatible endpoint, local or remote. Dictate into any a
 
 AverVOX OSS is free and open-source. For issues and questions, please open an issue on the project repository.
 
+If you are looking for additional features or would like to encourage ongoing development, please consider licensing a copy of [AverVOX Pro](https://avervoxpro.com/), a one‑time, no‑subscription companion app with many extended capabilities.
+
 ---
 
 ### Installation
