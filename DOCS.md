@@ -1,6 +1,9 @@
-# AverVOX — Documentation
+# AverVOX OSS — Documentation
+Technical reference for AverVOX OSS (free).
+Website Edition
+version: 0.3.3
 
-Technical reference for AverVOX (free). For a quick overview and install, see
+For a quick overview and install, see
 [README.md](README.md).
 
 ## Edition matrix

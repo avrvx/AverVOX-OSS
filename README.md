@@ -1,4 +1,6 @@
 # AverVOX OSS — Give your LLMs a voice.
+Website Edition
+version: 0.3.3
 
 Add voice to any OpenAI-compatible endpoint, local or remote. Dictate into any app. Select text to have it read aloud. Hold free-form voice conversations with Large Language Models (LLMs) on Linux.
 
@@ -48,7 +50,7 @@ This will:
 | Mode | Shortcut / Command | What it does |
 |------|-------------------|--------------|
 | **Speech‑to‑Text** | `Ctrl+Alt+Space` | Press once to start dictation, speak naturally, press again to stop. Text is inserted as you pause. |
-| **Oration** | `Ctrl+Alt+S` | Select any text, hit the shortcut, and AverVOX reads it aloud using Piper. |
+| **Oration** | `Ctrl+Alt+S` | Select any text, hit the shortcut, and AverVOX OSS reads it aloud using Piper. |
 | **Converse** | `Ctrl+Alt+C` | Hold a conversation with your chosen LLM. |
 | **CLI** | `avrvx …` | Headless commands for scripting (see below). |
 
@@ -122,7 +124,7 @@ Running `avrvx` with no flags launches the system‑tray app as described above.
 
   The microphone is muted during TTS to avoid echo; headphones are recommended.
 
-- **Interaction flow** – Speech → STT → LLM → streaming TTS. Playback begins as soon as the first sentence is ready and continues with minimal gaps while the model finishes generating. After each reply AverVOX automatically listens for the next turn.
+- **Interaction flow** – Speech → STT → LLM → streaming TTS. Playback begins as soon as the first sentence is ready and continues with minimal gaps while the model finishes generating. After each reply AverVOX OSS automatically listens for the next turn.
 
 - **Ending a conversation** – any of these will stop the loop:
   1. Say a goodbye phrase (e.g., "talk to you later", "goodbye", "that's all").
@@ -131,7 +133,7 @@ Running `avrvx` with no flags launches the system‑tray app as described above.
 
 - **Markdown stripping** – LLM output is cleaned of markup before it is spoken so the audio sounds natural.
 
-- **Session tracking** – If your LLM endpoint supports session‑aware conversations, set the *Session header* field in the LLM profile (e.g., `X-Hermes-Session-Id`). AverVOX sends a UUID with each request; if the server returns a different ID it adopts that for the rest of the app session.
+- **Session tracking** – If your LLM endpoint supports session‑aware conversations, set the *Session header* field in the LLM profile (e.g., `X-Hermes-Session-Id`). AverVOX OSS sends a UUID with each request; if the server returns a different ID it adopts that for the rest of the app session.
 
 - **State machine**
 
