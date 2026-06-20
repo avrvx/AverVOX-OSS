@@ -17,6 +17,7 @@ from .glib_compat import idle_add, markup_escape_text
 from .config import get_config, AppConfig, LLMProfile, CONFIG_FILE, _slugify
 from .hotkeys import _parse_hotkey
 from .logger import get_logger
+from .ui_secrets import create_secret_entry
 
 log = get_logger(__name__)
 
@@ -29,8 +30,6 @@ _WHISPER_MODELS: tuple[tuple[str, str], ...] = (
 )
 
 _ICON_TEST = "\u21bb"      # ↻  circular arrow
-_ICON_EYE_OPEN = "\u25cf"  # ●  visible
-_ICON_EYE_SHUT = "\u25cb"  # ○  hidden
 
 # Pro purchase page — see LINKS.md.
 _PRO_UPGRADE_URL = "https://avervoxpro.com/"
@@ -244,23 +243,8 @@ def show_settings_dialog() -> None:
     lbl_key = Gtk.Label(label="API Key", xalign=0)
     g_conn.attach(lbl_key, 0, 3, 1, 1)
 
-    e_key = Gtk.Entry()
-    e_key.set_placeholder_text("leave blank for local models")
-    e_key.set_visibility(False)
-    e_key.set_input_purpose(Gtk.InputPurpose.PASSWORD)
-    e_key.set_hexpand(True)
+    e_key, btn_eye = create_secret_entry(placeholder="leave blank for local models")
     g_conn.attach(e_key, 1, 3, 1, 1)
-
-    btn_eye = Gtk.ToggleButton(label=_ICON_EYE_SHUT)
-    btn_eye.set_tooltip_text("Show / hide key")
-    btn_eye.set_size_request(36, -1)
-
-    def _on_eye_toggled(btn):
-        visible = btn.get_active()
-        e_key.set_visibility(visible)
-        btn.set_label(_ICON_EYE_OPEN if visible else _ICON_EYE_SHUT)
-
-    btn_eye.connect("toggled", _on_eye_toggled)
     g_conn.attach(btn_eye, 2, 3, 1, 1)
 
     lbl_model = Gtk.Label(label="Model", xalign=0)

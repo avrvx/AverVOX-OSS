@@ -11,6 +11,8 @@ from typing import Optional
 
 import yaml
 
+from .secrets_store import decrypt, encrypt
+
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "avervox"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
@@ -100,12 +102,14 @@ class AppConfig:
             data[sect] = asdict(getattr(self, sect))
 
         if self.llm_profiles:
+            profiles_out = {}
+            for name, prof in self.llm_profiles.items():
+                prof_data = asdict(prof)
+                prof_data["api_key"] = _encrypt_config_secret(prof_data.get("api_key", ""))
+                profiles_out[name] = prof_data
             data["llm"] = {
                 "active": self.llm_active,
-                "profiles": {
-                    name: asdict(prof)
-                    for name, prof in self.llm_profiles.items()
-                },
+                "profiles": profiles_out,
             }
         else:
             data["llm"] = {}
@@ -134,6 +138,8 @@ class AppConfig:
             valid_keys = {f.name for f in fields(dc_cls)}
             for key, val in d.items():
                 if key in valid_keys:
+                    if key in _SECRET_CONFIG_FIELDS and isinstance(val, str):
+                        val = _decrypt_config_secret(val)
                     setattr(obj, key, val)
                 else:
                     _log.warning(
@@ -171,6 +177,27 @@ class AppConfig:
             cfg.llm_active = slug
 
         return cfg
+
+
+_SECRET_CONFIG_FIELDS = frozenset({"api_key"})
+
+
+def _encrypt_config_secret(value: str) -> str:
+    if not value:
+        return value
+    return encrypt(value)
+
+
+def _decrypt_config_secret(value: str) -> str:
+    if not value:
+        return value
+    try:
+        return decrypt(value)
+    except ValueError:
+        logging.getLogger(__name__).warning(
+            "Could not decrypt a stored secret — treating as empty (re-enter in Settings)"
+        )
+        return ""
 
 
 def _slugify(text: str) -> str:

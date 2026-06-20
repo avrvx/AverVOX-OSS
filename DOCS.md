@@ -1,7 +1,7 @@
 # AverVOX OSS — Documentation
 Technical reference for AverVOX OSS (free).
 Website Edition
-version: 0.3.3
+version: 0.3.5
 
 For a quick overview and install, see
 [README.md](README.md).
@@ -195,6 +195,9 @@ from the tray menu.
 **Backward compatibility:** Old flat-format `llm:` configs (with `api_base`
 directly under `llm:`) are automatically migrated to a single profile on first
 load.
+
+API keys are masked in Settings and stored encrypted in `config.yaml`. Plaintext
+keys from older configs still load until you save settings again.
 
 ## Source layout
 
