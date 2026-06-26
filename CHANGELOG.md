@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.6 — 2026-06-26
+
+- Version alignment with AverVOX Pro 0.3.6 (no user-facing OSS changes in this release).
+
 ## 0.3.5 — 2026-06-19
 
 - API keys are masked in Settings (show/hide toggle).
