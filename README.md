@@ -1,6 +1,6 @@
 # AverVOX OSS - Give your LLMs a voice.
 Website Edition
-version: 0.3.5
+version: 0.3.6
 
 Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus can receive your speech as text. Select text to have it read aloud. Hold free-form voice conversations with Large Language Models (LLMs) on Linux.
 
