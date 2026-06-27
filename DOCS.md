@@ -1,10 +1,12 @@
 # AverVOX OSS — Documentation
 Technical reference for AverVOX OSS (free).
 Website Edition
-version: 0.3.6
+version: 0.3.7
 
 For a quick overview and install, see
 [README.md](README.md).
+
+**New users:** [QUICK_START.md](QUICK_START.md) walks through the tray app and every Settings tab.
 
 ## Edition matrix
 
@@ -69,7 +71,7 @@ avrvx
 ```
 
 Starts the system tray icon with hotkeys active. A desktop notification
-confirms "AverVOX — Ready — hotkeys active". No window — just the tray.
+confirms "AverVOX OSS — Ready — hotkeys active". No window — just the tray.
 
 Right-click the tray icon for:
 
@@ -78,8 +80,8 @@ Right-click the tray icon for:
 - **Settings…** — open the full settings dialog
 - **Copy Last Response** — copy the most recent LLM response to the clipboard
 - **Open Log** — open `avervox.log` in your default text viewer
-- **About AverVOX** — version, tagline, and links
-- **Quit AverVOX**
+- **About AverVOX OSS** — version, tagline, and links
+- **Quit AverVOX OSS**
 
 ## Converse mode
 
@@ -94,7 +96,7 @@ Right-click the tray icon for:
 ### Voice interrupt (barge-in)
 
 When enabled in Settings, you can interrupt the assistant mid-response simply by
-speaking. AverVOX stops playback immediately and listens for your next turn.
+speaking. AverVOX OSS stops playback immediately and listens for your next turn.
 This requires headphones — without them, the TTS audio feeds back into the
 microphone and triggers false interrupts.
 
@@ -108,9 +110,9 @@ rather than markup syntax.
 
 If your LLM endpoint supports session-aware conversations (e.g. Hermes Agent,
 Open Claw), set the **Session header** field in your LLM profile to the
-appropriate HTTP header name (e.g. `X-Hermes-Session-Id`). AverVOX sends a
+appropriate HTTP header name (e.g. `X-Hermes-Session-Id`). AverVOX OSS sends a
 UUID in that header with every request. If the server returns a different
-session ID in the same header, AverVOX adopts it for all subsequent requests and
+session ID in the same header, AverVOX OSS adopts it for all subsequent requests and
 logs the change. Free supports custom session headers during the current app
 session; for persistent sessions that survive restarts, see AverVOX Pro.
 
@@ -226,7 +228,7 @@ src/avervox/
 
 ## Audio hardware and environment
 
-Like any speech application, AverVOX depends on the microphone and acoustic
+Like any speech application, AverVOX OSS depends on the microphone and acoustic
 environment you use. Recognition quality varies with hardware and room conditions
 — software tuning can help, but it cannot fully compensate for a poor signal at
 the source.
@@ -266,7 +268,7 @@ Dictate interim inserts and Converse end-of-turn both use `silence_duration_ms`
 **Tips:**
 
 - If Converse turns get clipped (cut off mid-sentence), increase `silence_duration_ms`.
-- If you hear echo (AverVOX responding to its own TTS), increase `rearm_delay_ms`.
+- If you hear echo (AverVOX OSS responding to its own TTS), increase `rearm_delay_ms`.
 - For the fastest possible turns at the cost of some accuracy, use `stt.model: tiny`
   with `beam_size: 1`.
 
@@ -275,7 +277,7 @@ Dictate interim inserts and Converse end-of-turn both use `silence_duration_ms`
 - **Logs**: `~/.local/share/avervox/avervox.log`
 - **No audio**: Run `avrvx --listen` to test capture in isolation
 - **Hotkey not working**: Check `journalctl --user -f` for pynput/X11 errors
-- **ALSA errors**: AverVOX auto-detects PulseAudio; ensure `pulseaudio` or
+- **ALSA errors**: AverVOX OSS auto-detects PulseAudio; ensure `pulseaudio` or
   `pipewire-pulse` is running
 - **Converse not working**: Open Settings, verify the test button shows a green
   checkmark and models are listed. Check the log for `LLM error` entries.

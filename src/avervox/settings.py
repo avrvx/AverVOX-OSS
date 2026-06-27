@@ -123,7 +123,54 @@ def _hotkeys_error(listen: str, speak: str, converse: str) -> str | None:
     return None
 
 
-def show_settings_dialog() -> None:
+def _build_app_about_box(
+    program_name: str,
+    version: str,
+    comments: str,
+    copyright_text: str,
+    website_url: str,
+    website_label: str | None = None,
+    license_line: str | None = None,
+) -> Gtk.Box:
+    """App metadata block (formerly Gtk.AboutDialog content)."""
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+    title = Gtk.Label()
+    title.set_markup(f"<b><big>{markup_escape_text(program_name)}</big></b>")
+    title.set_xalign(0.0)
+    box.pack_start(title, False, False, 0)
+    ver = Gtk.Label(label=f"Version {version}")
+    ver.set_xalign(0.0)
+    box.pack_start(ver, False, False, 0)
+    if comments:
+        desc = Gtk.Label(label=comments)
+        desc.set_xalign(0.0)
+        desc.set_line_wrap(True)
+        box.pack_start(desc, False, False, 0)
+    if copyright_text:
+        cr = Gtk.Label(label=copyright_text)
+        cr.set_xalign(0.0)
+        box.pack_start(cr, False, False, 0)
+    link = Gtk.LinkButton(uri=website_url, label=website_label or website_url)
+    link.set_halign(Gtk.Align.START)
+    box.pack_start(link, False, False, 0)
+    if license_line:
+        lic = Gtk.Label(label=license_line)
+        lic.set_xalign(0.0)
+        lic.set_line_wrap(True)
+        box.pack_start(lic, False, False, 0)
+    return box
+
+
+def _select_notebook_tab(notebook: Gtk.Notebook, label: str) -> None:
+    target = label.strip().lower()
+    for i in range(notebook.get_n_pages()):
+        tab_widget = notebook.get_tab_label(notebook.get_nth_page(i))
+        if tab_widget and tab_widget.get_text().strip().lower() == target:
+            notebook.set_current_page(i)
+            return
+
+
+def show_settings_dialog(initial_tab: str | None = None) -> None:
     """Open a modal settings dialog.  Saves to config.yaml and sends SIGHUP on OK."""
     cfg = get_config()
 
@@ -514,6 +561,23 @@ def show_settings_dialog() -> None:
     lbl_adv_hint.set_line_wrap(True)
     g_adv.attach(lbl_adv_hint, 0, 2, 2, 1)
     _add_tab(notebook, "Advanced", g_adv)
+
+    # ── About tab ──
+    from . import __version__
+
+    about_tab = _build_app_about_box(
+        "AverVOX OSS",
+        __version__,
+        "Add voice to any LLM using an OpenAI-compatible endpoint.",
+        "",
+        "https://github.com/avrvx/AverVOX-OSS",
+        website_label="GitHub — AverVOX-OSS",
+        license_line="Licensed under the MIT License.",
+    )
+    _add_tab(notebook, "About", about_tab)
+
+    if initial_tab:
+        _select_notebook_tab(notebook, initial_tab)
 
     while True:
         dialog.show_all()

@@ -674,15 +674,8 @@ class AverVoxApp:
             log.warning("Log file not found: %s", log_path)
 
     def _show_about(self) -> None:
-        from . import __version__
-        dialog = Gtk.AboutDialog()
-        dialog.set_program_name("AverVOX OSS")
-        dialog.set_version(__version__)
-        dialog.set_comments("Add voice to any LLM using an OpenAI-compatible endpoint.")
-        dialog.set_website("https://github.com/avrvx/AverVOX-OSS")
-        dialog.set_license_type(Gtk.License.MIT_X11)
-        dialog.run()
-        dialog.destroy()
+        from .settings import show_settings_dialog
+        show_settings_dialog(initial_tab="about")
 
     def _quit(self) -> None:
         log.info("AverVOX quitting")
