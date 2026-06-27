@@ -6,7 +6,7 @@ version: 0.3.7
 For a quick overview and install, see
 [README.md](README.md).
 
-**New users:** [QUICK_START.md](QUICK_START.md) walks through the tray app and every Settings tab.
+**New users:** [QUICK_START-OSS.md](QUICK_START-OSS.md) walks through the tray app and every Settings tab.
 
 ## Edition matrix
 
