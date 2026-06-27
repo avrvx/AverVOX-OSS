@@ -1,6 +1,6 @@
 # AverVOX OSS - Give your LLMs a voice.
 Website Edition
-version: 0.3.6
+version: 0.3.7
 
 Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus can receive your speech as text. Select text to have it read aloud. Hold free-form voice conversations with Large Language Models (LLMs) on Linux.
 
@@ -57,6 +57,8 @@ This will:
 
 Alternatively, `pip install avervox` installs the package; you still need the system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for the full list.
 
+**New to AverVOX OSS?** See [QUICK_START.md](QUICK_START.md) for a guided tour of the tray app and every Settings tab.
+
 ---
 
 ## Interaction Modes
@@ -88,7 +90,7 @@ Alternatively, `pip install avervox` installs the package; you still need the sy
 avrvx
 ```
 - Starts a tray icon with hotkeys active.
-- A desktop notification confirms the app is ready ("AverVOX - Ready - hotkeys active").
+- A desktop notification confirms the app is ready ("AverVOX OSS - Ready - hotkeys active").
 - No main window appears; all interaction is via shortcuts or the tray menu.
 
 **Tray-icon right-click menu**
@@ -307,7 +309,7 @@ Adjust **Settings -> Dictate** and **Settings -> Converse** to match your condit
 **Tips:**
 
 - If Converse turns get clipped (cut off mid-sentence), increase `silence_duration_ms`.
-- If you hear echo (AverVOX responding to its own TTS), increase `rearm_delay_ms`.
+- If you hear echo (AverVOX OSS responding to its own TTS), increase `rearm_delay_ms`.
 - For the fastest possible turns at the cost of some accuracy, use `stt.model: tiny` with `beam_size: 1`.
 
 ---

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "avrvx"
-version = "0.3.6"
+version = "0.3.7"
 description = "Give your LLMs a voice. Dictate, speak, and converse with any OpenAI-compatible LLM from a global hotkey on Linux."
 readme = "README.md"
 license = "MIT"
