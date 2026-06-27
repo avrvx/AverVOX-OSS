@@ -25,6 +25,7 @@ def _make_gi_stubs() -> None:
     """Inject minimal fakes for gi, Gtk, GLib, AppIndicator3, and other C-extension modules."""
     gi_mod = types.ModuleType("gi")
     gi_mod.require_version = lambda *_: None  # type: ignore[attr-defined]
+    gi_mod.__version__ = "3.42.2"
     sys.modules.setdefault("gi", gi_mod)
 
     repo_mod = types.ModuleType("gi.repository")
@@ -35,6 +36,8 @@ def _make_gi_stubs() -> None:
     glib_mod.timeout_add = MagicMock()
     glib_mod.set_prgname = MagicMock()
     glib_mod.set_application_name = MagicMock()
+    glib_mod.PRIORITY_DEFAULT = 0
+    glib_mod.PRIORITY_DEFAULT_IDLE = 200
     sys.modules.setdefault("gi.repository.GLib", glib_mod)
     repo_mod.GLib = glib_mod  # type: ignore[attr-defined]
 
@@ -79,7 +82,7 @@ class TestNotifyConfigReloadFailed:
         exc = ValueError("bad value")
         with patch("subprocess.run") as mock_run:
             _notify_config_reload_failed(exc)
-        assert "AverVOX \u2014 config reload failed" in _subprocess_args(mock_run)
+        assert "AverVOX OSS \u2014 config reload failed" in _subprocess_args(mock_run)
 
     def test_urgency_flag_is_critical(self):
         exc = ValueError("bad value")
@@ -165,6 +168,7 @@ class TestReloadConfigIntegration:
         app._llm = MagicMock()
         app._converse_history = []
         app._listen_mode = "dictation"
+        app._tray = MagicMock()
         return app
 
     def test_failure_notification_sent_when_reload_raises(self):
