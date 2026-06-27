@@ -57,7 +57,7 @@ This will:
 
 Alternatively, `pip install avervox` installs the package; you still need the system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for the full list.
 
-**New to AverVOX OSS?** See [QUICK_START.md](QUICK_START.md) for a guided tour of the tray app and every Settings tab.
+**New to AverVOX OSS?** See [QUICK_START-OSS.md](QUICK_START-OSS.md) for a guided tour of the tray app and every Settings tab.
 
 ---
 

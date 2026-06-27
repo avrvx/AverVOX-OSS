@@ -2,7 +2,7 @@
 
 ## 0.3.7 — 2026-06-27
 
-- Add Quick Start User Guide (`QUICK_START.md`).
+- Add Quick Start User Guide (`QUICK_START-OSS.md`).
 - Settings: add **About** tab (replaces separate About dialog); tray **About** opens Settings on About.
 - Documentation: AverVOX OSS/Pro designations in README, DOCS, and Quick Start.
 - Tests: fix GTK `gi` stubs in `test_main_reload.py`.
