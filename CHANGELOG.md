@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8 - 2026-06-28
+
+- Version alignment with AverVOX Pro 0.3.8 (no user-facing OSS changes in this release).
+
 ## 0.3.7 - 2026-06-27
 
 - Add Quick Start User Guide (`QUICK_START-OSS.md`).
