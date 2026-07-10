@@ -329,6 +329,12 @@ Log file: `~/.local/share/avervox/avervox.log`
 
 ---
 
+## Commit attribution
+
+Past commits may show "Cursor Agent" as a co-author due to an unanticipated IDE feature. The code is authored and maintained by Carl E. Hartung. That attribution setting has been turned off going forward.
+
+---
+
 ## License
 
 AverVOX OSS is free and open-source software. See the `LICENSE` file for full terms.
