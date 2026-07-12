@@ -26,13 +26,13 @@ def _cli_listen() -> None:
     from .audio import AudioCapture, SAMPLE_RATE
 
     cfg = get_config()
-    stt.configure(model=cfg.stt.model, language=cfg.stt.language)
+    stt.configure(model=cfg.stt.model, language=cfg.stt.language, device=cfg.stt.device)
     stt.preload()
 
     audio_cap = AudioCapture()
     audio_cap.configure(
         aggressiveness=cfg.audio.vad_aggressiveness,
-        silence_duration_ms=cfg.audio.silence_duration_ms,
+        converse_end_ms=cfg.converse.end_of_turn_ms,
     )
 
     import threading

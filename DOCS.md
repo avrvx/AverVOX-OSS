@@ -1,7 +1,7 @@
 # AverVOX OSS - Documentation
 Technical reference for AverVOX OSS (free).
 Website Edition
-version: 0.3.8
+version: 0.3.9
 
 For a quick overview and install, see
 [README.md](README.md).
@@ -39,14 +39,14 @@ on GitHub or PyPI. See `[Pro purchase page]`. URL placeholders: [LINKS.md](LINKS
 │  Activation                                                      │
 │    Hotkeys (pynput)                                              │
 │                                                                  │
-│    Ctrl+Alt+Space  ->  record -> STT -> insert_text()   (Dictate; press to stop)│
-│    Ctrl+Alt+S      ->  get_selection() -> TTS -> play   (Speak)   │
-│    Ctrl+Alt+C      ->  listen -> STT -> LLM -> TTS <-     (Converse)│
+│    Ctrl+Alt+Space  ->  record -> STT -> insert_text()   (Dictate)│
+│    Ctrl+Alt+S      ->  get_selection() -> TTS -> play   (Speak)  │
+│    Ctrl+Alt+C      ->  listen -> STT -> LLM -> TTS <-   (Converse)│
 └──────────────────────────────────────────────────────────────────┘
 │ Services layer (SpeechService, InsertService, LLMService)        │
 │   STT: faster-whisper, TTS: piper, LLM: httpx -> OpenAI API      │
 ├──────────────────────────────────────────────────────────────────┤
-│ STT: faster-whisper (local, CPU, int8)                           │
+│ STT: faster-whisper (local, CPU/GPU auto, int8)                   │
 │ TTS: piper-tts (local ONNX voices, ~16 MB)                      │
 │ Audio: parec (capture) + sounddevice (playback) + webrtcvad      │
 │ Insert: xdotool type / clipboard fallback                        │
@@ -151,23 +151,27 @@ hotkeys:
 stt:
   model: base        # tiny, base, small, medium, large-v3
   language: en
+  device: auto       # auto | cpu | cuda
 
 tts:
   voice_model: ~/.local/share/piper-tts/voices/en_US-lessac-high.onnx
 
 audio:
   vad_aggressiveness: 2      # 0-3 (higher = more aggressive silence detection)
-  silence_duration_ms: 1000  # Dictate interim + Converse (Settings -> Dictate)
+
+dictate:
+  interim_pause_ms: 1000     # pause before dictation insert (Settings -> Dictate)
 
 backends:
   text_inserter: xdotool     # xdotool | ydotool - Settings -> Advanced
   selection_provider: xclip  # xclip | xsel | wl-paste
 
-# Converse mode options
 converse:
+  end_of_turn_ms: 1100             # pause after you stop speaking (Settings -> Converse)
   silence_timeout_ms: 7000         # silence before ending conversation (ms)
   rearm_delay_ms: 250              # pause after TTS before mic reopens (ms)
-  goodbye_phrases:                 # phrases that end the conversation
+  early_listen_ms: 300             # pre-open mic before TTS ends (headphones only)
+  goodbye_phrases:
     - "talk to you later"
     - "goodbye"
     - "bye bye"
@@ -178,7 +182,6 @@ converse:
   interrupt_enabled: false          # voice interrupt (barge-in) - requires headphones
   interrupt_headphones_confirmed: false
 
-# LLM profiles (for Converse mode) - manage via Settings or edit directly
 llm:
   active: my-server
   profiles:
@@ -196,7 +199,8 @@ from the tray menu.
 
 **Backward compatibility:** Old flat-format `llm:` configs (with `api_base`
 directly under `llm:`) are automatically migrated to a single profile on first
-load.
+load. Legacy `audio.silence_duration_ms` migrates to `dictate.interim_pause_ms`
+and `converse.end_of_turn_ms`.
 
 API keys are masked in Settings and stored encrypted in `config.yaml`. Plaintext
 keys from older configs still load until you save settings again.
@@ -254,23 +258,37 @@ For persistent difficulty in noisy conditions, try a larger STT model
 
 Converse mode latency comes from several stages. The table below shows the
 defaults and conservative alternatives if the defaults feel too aggressive.
-Dictate interim inserts and Converse end-of-turn both use `silence_duration_ms`
-(configurable in **Settings -> Dictate**).
 
 | Setting | Default | Conservative | Where | Effect |
 |---------|---------|-------------|-------|--------|
-| `silence_duration_ms` | **1000** | 1500 | Settings -> Dictate, or `config.yaml` -> `audio` | Dictate: pause before typing an interim chunk. Converse / `avrvx --listen`: end-of-turn delay. |
-| `rearm_delay_ms` | **250** | 500 | `config.yaml` -> `converse` | Pause after TTS finishes before the mic reopens. Prevents echo/feedback. Increase if you hear the speaker feeding back into the mic. |
+| `dictate.interim_pause_ms` | **1000** | 1500 | Settings -> Dictate | Dictate: pause before typing an interim chunk. |
+| `converse.end_of_turn_ms` | **1100** | 1500 | Settings -> Converse | Converse / `avrvx --listen`: end-of-turn delay. |
+| `rearm_delay_ms` | **250** | 500 | `config.yaml` -> `converse` | Pause after TTS finishes before the mic reopens. Prevents echo/feedback. |
 | `silence_timeout_ms` | **7000** | 10000 | `config.yaml` -> `converse` | How long to wait with no speech before ending the conversation. |
 | STT `beam_size` | **1** | 5 | `stt.py` | Greedy (1) is faster; beam search (5) is more accurate for mumbled or technical speech. |
 | STT model | **base** | tiny / small | `config.yaml` -> `stt.model` | `tiny` is fastest, `small`/`medium` more accurate. `base` is a good middle ground. |
 
 **Tips:**
 
-- If Converse turns get clipped (cut off mid-sentence), increase `silence_duration_ms`.
+- If Converse turns get clipped (cut off mid-sentence), increase `converse.end_of_turn_ms`.
 - If you hear echo (AverVOX OSS responding to its own TTS), increase `rearm_delay_ms`.
 - For the fastest possible turns at the cost of some accuracy, use `stt.model: tiny`
   with `beam_size: 1`.
+
+## LLM model health & failure detection
+
+During Converse, AverVOX monitors each LLM stream and reacts when a model
+misbehaves, so you are not left waiting in silence for a minute or more.
+
+| Threshold | Default | Defined in | Triggers when |
+|-----------|---------|------------|---------------|
+| **First-token timeout** | **30 s** | `llm_control.py` → `FIRST_TOKEN_TIMEOUT_S` | No **content** token within this time after the request is sent. Empty SSE keepalive chunks do not count. |
+| **Empty response** | **30 s** | `EMPTY_RESPONSE_MIN_S` | Stream finishes with zero usable content after at least this long. |
+| **Stream read stall** | **90 s** | `STREAM_READ_TIMEOUT_S` | No SSE bytes at all for this long. |
+
+On failure, the request is aborted, the model is unloaded, and the model is
+disabled for the rest of the app session. **The next time you start AverVOX**,
+all `disabled_models` entries are cleared automatically.
 
 ## Troubleshooting
 
@@ -281,10 +299,13 @@ Dictate interim inserts and Converse end-of-turn both use `silence_duration_ms`
   `pipewire-pulse` is running
 - **Converse not working**: Open Settings, verify the test button shows a green
   checkmark and models are listed. Check the log for `LLM error` entries.
+- **Model greyed out / disabled**: A failure threshold tripped — see **LLM model
+  health & failure detection** above; check `disabled_models` in config and the
+  log for `LLM model failure`.
 - **Garbled or incomplete transcription**: Reduce background noise, move closer
   to the mic, or try a better microphone; lower VAD sensitivity or increase
   interim pause in **Settings -> Dictate**; consider `stt.model: small` or
   `medium` for difficult audio.
 - **Converse ends too soon or misses speech in noise**: Increase
-  `silence_duration_ms` and/or `silence_timeout_ms`; use headphones to limit
+  `converse.end_of_turn_ms` and/or `silence_timeout_ms`; use headphones to limit
   speaker bleed in loud environments.

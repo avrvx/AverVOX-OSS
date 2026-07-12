@@ -10,6 +10,9 @@ Two capture modes:
 - **VAD segment** (Converse, ``avrvx --listen``): detects silence boundaries
   and emits complete speech segments automatically.
 
+Converse keeps the parec subprocess alive between turns; frames are discarded
+while STT/LLM/TTS runs and listening resumes without restarting parec.
+
 Also provides InterruptMonitor — a lightweight VAD watcher used during
 TTS playback to detect voice interrupts (barge-in).
 
@@ -25,6 +28,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional
 
 import numpy as np
+
 
 from .logger import get_logger
 
@@ -75,13 +79,32 @@ class AudioCapture:
         self._interim_committed_frame_idx = 0
         self._thread: Optional[threading.Thread] = None
         self._aggressiveness = 2
-        self._silence_duration_ms = 800
+        self._dictate_pause_ms = 1000
+        self._converse_end_ms = 700
+        self._discarding = False
+        self._reset_vad = False
 
-    def configure(self, aggressiveness: int = 2, silence_duration_ms: int = 800, **kwargs) -> None:
+    def configure(
+        self,
+        aggressiveness: int = 2,
+        *,
+        dictate_pause_ms: int = 1000,
+        converse_end_ms: int = 700,
+        silence_duration_ms: int | None = None,
+        **kwargs,
+    ) -> None:
+        """Configure VAD. Legacy *silence_duration_ms* sets both pause values."""
         self._aggressiveness = aggressiveness
-        self._silence_duration_ms = silence_duration_ms
+        if silence_duration_ms is not None:
+            self._dictate_pause_ms = silence_duration_ms
+            self._converse_end_ms = min(silence_duration_ms, 1200)
+        else:
+            self._dictate_pause_ms = dictate_pause_ms
+            self._converse_end_ms = converse_end_ms
+
+    def _apply_silence_threshold(self, silence_ms: int) -> None:
         frames_per_second = 1000 / FRAME_DURATION_MS
-        self._silence_threshold = int((silence_duration_ms / 1000) * frames_per_second)
+        self._silence_threshold = int((silence_ms / 1000) * frames_per_second)
 
     def set_on_segment(self, cb: Optional[Callable[[np.ndarray], None]]) -> None:
         self._on_segment_cb = cb
@@ -94,6 +117,26 @@ class AudioCapture:
         """True if speech frames are currently buffered (user is mid-utterance)."""
         with self._lock:
             return len(self._speech_frames) > 0
+
+    def is_capturing(self) -> bool:
+        with self._lock:
+            return self._recording
+
+    def discard_on(self) -> None:
+        """Ignore mic frames while processing or during TTS (Converse warm path)."""
+        with self._lock:
+            self._discarding = True
+            self._speech_frames = []
+            self._silence_frames = 0
+            self._reset_vad = True
+
+    def discard_off(self) -> None:
+        """Resume VAD segment detection on the warm parec stream."""
+        with self._lock:
+            self._discarding = False
+            self._speech_frames = []
+            self._silence_frames = 0
+            self._reset_vad = True
 
     def _init_vad(self) -> bool:
         try:
@@ -114,6 +157,11 @@ class AudioCapture:
             self._speech_frames = []
             self._silence_frames = 0
             self._interim_committed_frame_idx = 0
+            self._discarding = False
+            self._reset_vad = True
+
+        pause_ms = self._dictate_pause_ms if recorder_mode else self._converse_end_ms
+        self._apply_silence_threshold(pause_ms)
 
         if recorder_mode and self._on_interim_cb:
             if not self._init_vad():
@@ -127,10 +175,20 @@ class AudioCapture:
         self._thread = thread
         thread.start()
 
+    def start_converse(self) -> None:
+        """Start or resume Converse capture without restarting parec when possible."""
+        if self.is_capturing() and not self._recorder_mode:
+            self.discard_off()
+            return
+        if self.is_capturing():
+            self.stop()
+        self.start(recorder_mode=False)
+
     def stop(self) -> Optional[CaptureResult]:
         """Stop recording and return buffered audio plus interim commit offset."""
         with self._lock:
             self._recording = False
+            self._discarding = False
 
         if self._thread is not None:
             self._thread.join(timeout=5.0)
@@ -209,6 +267,7 @@ class AudioCapture:
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                
             )
         except FileNotFoundError:
             log.error("parec not found — install pulseaudio-utils")
@@ -229,6 +288,17 @@ class AudioCapture:
                 frame_bytes = self._process.stdout.read(FRAME_BYTES)
                 if not frame_bytes or len(frame_bytes) < FRAME_BYTES:
                     break
+
+                with self._lock:
+                    if self._reset_vad:
+                        in_speech = False
+                        speech_frame_count = 0
+                        self._silence_frames = 0
+                        self._reset_vad = False
+                    discarding = self._discarding
+
+                if discarding:
+                    continue
 
                 if self._recorder_mode:
                     with self._lock:
@@ -282,6 +352,7 @@ class AudioCapture:
                             else:
                                 log.debug("Discarded noise burst (%d frames < %d min)",
                                           speech_frame_count, MIN_SPEECH_FRAMES)
+                            speech_frame_count = 0
         except Exception as exc:
             log.error("Audio capture error: %s", exc, exc_info=True)
         finally:
@@ -379,6 +450,7 @@ class InterruptMonitor:
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                
             )
         except FileNotFoundError:
             log.error("parec not found — interrupt monitor unavailable")

@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import uuid
 from typing import Generator, TYPE_CHECKING
 
 import httpx
 
+from .llm_control import (
+    EMPTY_RESPONSE_MIN_S,
+    FIRST_TOKEN_TIMEOUT_S,
+    LLMModelFailure,
+    STREAM_READ_TIMEOUT_S,
+)
 from .logger import get_logger
 
 if TYPE_CHECKING:
@@ -117,44 +124,74 @@ class LLMBackend:
         log.info("LLM stream request: model=%s, messages=%d", payload["model"], len(messages))
         full_text = ""
         buffer = ""
+        start = time.perf_counter()
+        stream_timeout = httpx.Timeout(120.0, read=STREAM_READ_TIMEOUT_S)
+        model_name = payload["model"]
 
-        with self._client.stream("POST", url, json=payload, headers=self._headers()) as resp:
-            resp.raise_for_status()
-            self._adopt_session_id(resp.headers)
-            for line in resp.iter_lines():
-                if not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str.strip() == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
-                delta = chunk.get("choices", [{}])[0].get("delta", {})
-                token = delta.get("content", "")
-                if not token:
-                    continue
+        def _check_first_token_timeout(saw_content: bool) -> None:
+            if saw_content:
+                return
+            elapsed = time.perf_counter() - start
+            if elapsed >= FIRST_TOKEN_TIMEOUT_S:
+                raise LLMModelFailure(
+                    model_name,
+                    f"no usable output within {FIRST_TOKEN_TIMEOUT_S:.0f}s",
+                )
 
-                buffer += token
-
-                while True:
-                    m = _SENTENCE_END.search(buffer)
-                    if not m:
+        try:
+            with self._client.stream(
+                "POST", url, json=payload, headers=self._headers(), timeout=stream_timeout,
+            ) as resp:
+                resp.raise_for_status()
+                self._adopt_session_id(resp.headers)
+                saw_content = False
+                for line in resp.iter_lines():
+                    _check_first_token_timeout(saw_content)
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
                         break
-                    split_at = m.end()
-                    sentence = buffer[:split_at].strip()
-                    buffer = buffer[split_at:]
-                    if sentence:
-                        full_text += sentence + " "
-                        log.debug("Streaming sentence: %s", sentence[:80])
-                        yield sentence
+                    try:
+                        chunk = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    token = delta.get("content", "")
+                    if not token:
+                        continue
+                    saw_content = True
 
+                    buffer += token
+
+                    while True:
+                        m = _SENTENCE_END.search(buffer)
+                        if not m:
+                            break
+                        split_at = m.end()
+                        sentence = buffer[:split_at].strip()
+                        buffer = buffer[split_at:]
+                        if sentence:
+                            full_text += sentence + " "
+                            log.debug("Streaming sentence: %s", sentence[:80])
+                            yield sentence
+        except httpx.ReadTimeout as exc:
+            raise LLMModelFailure(
+                model_name,
+                f"stream stalled ({STREAM_READ_TIMEOUT_S:.0f}s with no output)",
+            ) from exc
+
+        elapsed = time.perf_counter() - start
         if buffer.strip():
             full_text += buffer.strip()
             yield buffer.strip()
 
         log.info("LLM stream complete: %d chars total", len(full_text))
+        if not full_text.strip() and elapsed >= EMPTY_RESPONSE_MIN_S:
+            raise LLMModelFailure(
+                model_name,
+                f"empty response after {elapsed:.0f}s",
+            )
         return full_text.strip()
 
     def shutdown(self) -> None:

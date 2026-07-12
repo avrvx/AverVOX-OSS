@@ -35,7 +35,8 @@ def get_log_lines() -> List[str]:
     return list(_ring_buffer)
 
 
-def setup_logging(level: int = logging.DEBUG) -> None:
+def setup_logging(level: int = logging.DEBUG, *, console: bool = True) -> None:
+    """Configure file + ring-buffer logging; optional stderr for CLI/debug."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     fmt = logging.Formatter(
@@ -55,13 +56,14 @@ def setup_logging(level: int = logging.DEBUG) -> None:
         ring_handler.setFormatter(fmt)
         ring_handler.setLevel(level)
 
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(fmt)
-        stream_handler.setLevel(logging.WARNING)
-
         root.addHandler(file_handler)
         root.addHandler(ring_handler)
-        root.addHandler(stream_handler)
+
+        if console:
+            stream_handler = logging.StreamHandler()
+            stream_handler.setFormatter(fmt)
+            stream_handler.setLevel(logging.WARNING)
+            root.addHandler(stream_handler)
 
 
 def get_logger(name: str) -> logging.Logger:

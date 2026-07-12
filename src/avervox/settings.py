@@ -463,7 +463,7 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
 
     s_dict_pause = _spin(
         g_dict, 2, "Interim pause (ms)",
-        float(cfg.audio.silence_duration_ms),
+        float(cfg.dictate.interim_pause_ms),
         500.0, 5000.0, 100.0, digits=0,
     )
     s_dict_vad = _spin(
@@ -475,9 +475,7 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
     lbl_dict_hint = Gtk.Label(xalign=0)
     lbl_dict_hint.set_markup(
         '<small>After each pause, spoken text is typed into the focused app while '
-        'recording continues. Press the Dictate hotkey again to finish. '
-        'Pause timing also applies to Converse end-of-turn and '
-        '<tt>avrvx --listen</tt>.</small>'
+        'recording continues. Press the Dictate hotkey again to finish.</small>'
     )
     lbl_dict_hint.set_line_wrap(True)
     g_dict.attach(lbl_dict_hint, 0, 4, 2, 1)
@@ -487,27 +485,32 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
     # ── Converse tab ──
     g_conv = Gtk.Grid(column_spacing=8, row_spacing=8)
 
-    s_silence = _spin(g_conv, 0, "Silence timeout (sec)",
+    s_end_turn = _spin(
+        g_conv, 0, "End-of-turn pause (ms)",
+        float(cfg.converse.end_of_turn_ms),
+        300.0, 3000.0, 50.0, digits=0,
+    )
+    s_silence = _spin(g_conv, 1, "Silence timeout (sec)",
                       cfg.converse.silence_timeout_ms / 1000,
                       1.0, 30.0, 1.0, digits=0)
-    s_rearm = _spin(g_conv, 1, "Re-arm delay (ms)",
+    s_rearm = _spin(g_conv, 2, "Re-arm delay (ms)",
                     float(cfg.converse.rearm_delay_ms),
                     50.0, 2000.0, 50.0, digits=0)
 
     lbl_goodbye = Gtk.Label(label="Goodbye phrases (comma-separated)", xalign=0)
-    g_conv.attach(lbl_goodbye, 0, 2, 1, 1)
+    g_conv.attach(lbl_goodbye, 0, 3, 1, 1)
     e_goodbye = Gtk.Entry()
     e_goodbye.set_text(", ".join(cfg.converse.goodbye_phrases))
     e_goodbye.set_hexpand(True)
-    g_conv.attach(e_goodbye, 1, 2, 1, 1)
+    g_conv.attach(e_goodbye, 1, 3, 1, 1)
 
     lbl_intr = Gtk.Label(label="Voice interrupt (barge-in)", xalign=0)
-    g_conv.attach(lbl_intr, 0, 3, 1, 1)
+    g_conv.attach(lbl_intr, 0, 4, 1, 1)
     sw_interrupt = Gtk.Switch()
     sw_interrupt.set_active(cfg.converse.interrupt_enabled)
     sw_interrupt.set_valign(Gtk.Align.CENTER)
     sw_interrupt.set_halign(Gtk.Align.START)
-    g_conv.attach(sw_interrupt, 1, 3, 1, 1)
+    g_conv.attach(sw_interrupt, 1, 4, 1, 1)
 
     lbl_hp_warn = Gtk.Label(xalign=0)
     lbl_hp_warn.set_markup(
@@ -518,13 +521,13 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
     lbl_hp_warn.set_line_wrap(True)
     lbl_hp_warn.set_no_show_all(True)
     lbl_hp_warn.set_visible(cfg.converse.interrupt_enabled)
-    g_conv.attach(lbl_hp_warn, 0, 4, 2, 1)
+    g_conv.attach(lbl_hp_warn, 0, 5, 2, 1)
 
     cb_headphones = Gtk.CheckButton(label="Headphones are in use.")
     cb_headphones.set_active(cfg.converse.interrupt_headphones_confirmed)
     cb_headphones.set_no_show_all(True)
     cb_headphones.set_visible(cfg.converse.interrupt_enabled)
-    g_conv.attach(cb_headphones, 0, 5, 2, 1)
+    g_conv.attach(cb_headphones, 0, 6, 2, 1)
 
     def _on_interrupt_switch(sw, _gparam):
         active = sw.get_active()
@@ -619,9 +622,10 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
 
         cfg.stt.model = combo_stt.get_active_id() or "base"
         cfg.stt.language = e_stt_lang.get_text().strip() or "en"
-        cfg.audio.silence_duration_ms = int(s_dict_pause.get_value())
+        cfg.dictate.interim_pause_ms = int(s_dict_pause.get_value())
         cfg.audio.vad_aggressiveness = int(s_dict_vad.get_value())
 
+        cfg.converse.end_of_turn_ms = int(s_end_turn.get_value())
         cfg.converse.silence_timeout_ms = int(s_silence.get_value() * 1000)
         cfg.converse.rearm_delay_ms = int(s_rearm.get_value())
         raw_goodbye = e_goodbye.get_text().strip()

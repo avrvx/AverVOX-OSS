@@ -26,6 +26,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("GLib", "2.0")
 from gi.repository import GLib, Gtk
 
+from .llm_control import LLMModelFailure
 from .logger import setup_logging, get_logger
 from .config import get_config, reload_config
 from .hotkeys import HotkeyManager
@@ -38,9 +39,25 @@ from .glib_compat import timeout_add, idle_add, clipboard_set_text
 
 log = get_logger(__name__)
 
-_DEFAULT_GOODBYE_PHRASES = ("talk to you later", "goodbye", "bye bye",
-                            "see you later", "that's all", "good night",
-                            "i'm done")
+_DEFAULT_GOODBYE_PHRASES = (
+    "talk to you later", "talk soon", "we'll talk soon",
+    "goodbye", "bye bye", "bye for now",
+    "see you later", "see you soon", "catch you later",
+    "that's all", "good night", "i'm done",
+)
+_TERS_GOODBYE_MARKERS = ("bye", "goodbye", "see you", "good night")
+_CANNED_FAREWELL = "Goodbye!"
+
+
+def _matches_goodbye(text_lower: str, phrases: tuple[str, ...] | list[str]) -> bool:
+    return any(p in text_lower for p in phrases)
+
+
+def _is_terse_goodbye(text_lower: str) -> bool:
+    """Short explicit sign-offs can skip the LLM round-trip."""
+    if len(text_lower) > 48:
+        return False
+    return any(m in text_lower for m in _TERS_GOODBYE_MARKERS)
 
 
 class AppState(enum.Enum):
@@ -57,19 +74,34 @@ class AverVoxApp:
     def __init__(self) -> None:
         self._state = AppState.IDLE
         self._cfg = get_config()
+        cleared = self._cfg.clear_disabled_models()
+        if cleared:
+            self._cfg.save()
+            log.info(
+                "Re-enabled %d model(s) disabled in prior session: %s",
+                len(cleared), ", ".join(cleared),
+            )
         self._converse_history: list[dict] = []
         self._listen_mode: str = "dictation"
         self._conversing_session = False
         self._converse_ending = False
         self._converse_timer_id: int = 0
         self._interrupted = False
+        self._early_listen_armed = False
+        self._early_capture = False
+        self._assistant_busy = False
+        self._converse_turn_gen = 0
         self._last_response: str = ""
         self._dictate_insert_lock = threading.Lock()
         self._dictate_had_interim = False
 
         self._speech, self._insert, self._llm = create_services(self._cfg)
 
-        self._speech.configure(model=self._cfg.stt.model, language=self._cfg.stt.language)
+        self._speech.configure(
+            model=self._cfg.stt.model,
+            language=self._cfg.stt.language,
+            device=self._cfg.stt.device,
+        )
         self._speech.preload()
 
         tts.configure(voice_model=self._cfg.tts.voice_model)
@@ -78,7 +110,8 @@ class AverVoxApp:
         self._audio = AudioCapture()
         self._audio.configure(
             aggressiveness=self._cfg.audio.vad_aggressiveness,
-            silence_duration_ms=self._cfg.audio.silence_duration_ms,
+            dictate_pause_ms=self._cfg.dictate.interim_pause_ms,
+            converse_end_ms=self._cfg.converse.end_of_turn_ms,
         )
 
         self._hotkeys = HotkeyManager()
@@ -170,7 +203,7 @@ class AverVoxApp:
         else:
             self._audio.set_on_interim_segment(None)
             self._audio.set_on_segment(self._on_audio_segment)
-            self._audio.start(recorder_mode=False)
+            self._audio.start_converse()
 
     def _stop_listening(self) -> None:
         log.info("Stopping listen (%s)", self._listen_mode)
@@ -182,15 +215,19 @@ class AverVoxApp:
         if self._listen_mode == "dictation":
             remainder = result.audio[result.committed_samples:]
             if len(remainder) > 0:
-                timeout_add(100, self._transcribe_audio, remainder)
+                idle_add(self._dispatch_transcribe, remainder)
             elif self._dictate_had_interim:
                 log.debug("Dictate finished — remainder empty after interim inserts")
                 self._set_state(AppState.IDLE)
             else:
-                timeout_add(100, self._transcribe_audio, result.audio)
+                idle_add(self._dispatch_transcribe, result.audio)
             return
 
-        timeout_add(100, self._transcribe_audio, result.audio)
+        idle_add(self._dispatch_transcribe, result.audio)
+
+    def _dispatch_transcribe(self, audio) -> bool:
+        self._transcribe_audio(audio)
+        return False
 
     def _on_dictate_interim(self, audio) -> None:
         idle_add(self._schedule_dictate_interim, audio.copy())
@@ -236,9 +273,11 @@ class AverVoxApp:
             return False
         if self._listen_mode == "dictation":
             return False
-        self._cancel_converse_timer()
-        self._audio.stop()
-        timeout_add(100, self._transcribe_audio, audio)
+        self._abort_converse_turn()
+        self._early_capture = False
+        self._early_listen_armed = False
+        self._audio.discard_on()
+        self._transcribe_audio(audio)
         return False
 
     def _transcribe_audio(self, audio) -> bool:
@@ -363,9 +402,11 @@ class AverVoxApp:
             self._converse_timer_id = 0
 
     def _on_converse_silence_timeout(self) -> bool:
-        """No speech for 7 s while listening — end the conversation."""
+        """No speech for silence_timeout_ms while listening — end the conversation."""
         self._converse_timer_id = 0
         if self._conversing_session and self._state == AppState.LISTENING:
+            if self._assistant_busy:
+                return False
             if self._audio.has_speech_activity():
                 log.debug("Silence timer fired but speech active — re-arming")
                 self._arm_converse_timer()
@@ -375,17 +416,34 @@ class AverVoxApp:
                 self._end_converse_session()
         return False
 
+    def _abort_converse_turn(self) -> None:
+        """Cancel in-flight LLM/TTS so a new user turn can take over."""
+        self._converse_turn_gen += 1
+        self._interrupted = True
+        tts.stop()
+        self._cancel_converse_timer()
+
+    def _turn_stale(self, turn: int) -> bool:
+        return turn != self._converse_turn_gen or not self._conversing_session
+
+    def _pause_converse_silence_timer(self) -> bool:
+        self._cancel_converse_timer()
+        return False
+
     def _end_converse_session(self) -> None:
         """Clean up an active converse session regardless of current state."""
         was_active = self._conversing_session or self._converse_ending
         ending_goodbye = self._converse_ending
         self._conversing_session = False
         self._converse_ending = False
+        self._abort_converse_turn()
+        self._assistant_busy = False
+        self._early_capture = False
+        self._early_listen_armed = False
         self._cancel_converse_timer()
         if self._state == AppState.LISTENING:
             self._audio.stop()
-        elif self._state == AppState.SPEAKING:
-            tts.stop()
+        tts.stop()
         if ending_goodbye:
             self._converse_history.clear()
         self._set_state(AppState.IDLE)
@@ -394,18 +452,20 @@ class AverVoxApp:
             log.info("Conversation ended")
 
     def _do_transcribe_converse(self, audio) -> None:
-        """Background thread: transcribe audio, send to LLM, speak response.
-
-        Uses streaming when the LLM service supports it, speaking each
-        sentence as it arrives rather than waiting for the full response.
-        """
+        """Background thread: transcribe audio, send to LLM, speak response."""
+        turn = self._converse_turn_gen
         duration_s = len(audio) / 16000
         log.debug("Transcribing %.1fs of audio for conversation...", duration_s)
         try:
             text = self._speech.transcribe(audio)
         except Exception as exc:
             log.error("STT error: %s", exc)
-            idle_add(self._enter_error_state)
+            if not self._turn_stale(turn):
+                idle_add(self._enter_error_state)
+            return
+
+        if self._turn_stale(turn):
+            log.debug("Converse turn %d superseded after STT", turn)
             return
 
         if not text:
@@ -420,11 +480,36 @@ class AverVoxApp:
 
         text_lower = text.lower().strip()
         phrases = self._cfg.converse.goodbye_phrases or _DEFAULT_GOODBYE_PHRASES
-        if any(p in text_lower for p in phrases):
+        if _matches_goodbye(text_lower, phrases):
             log.info("Goodbye phrase detected — will end session after response")
             self._converse_ending = True
 
         self._converse_history.append({"role": "user", "content": text})
+
+        if self._converse_ending and _is_terse_goodbye(text_lower):
+            log.info("Terse goodbye — skipping LLM, speaking brief farewell")
+            self._interrupted = False
+            self._assistant_busy = True
+            idle_add(self._pause_converse_silence_timer)
+            if self._turn_stale(turn):
+                idle_add(self._clear_assistant_busy)
+                return
+            threading.Thread(
+                target=self._do_terse_farewell,
+                args=(turn, _CANNED_FAREWELL),
+                daemon=True,
+                name="farewell-tts",
+            ).start()
+            return
+
+        self._interrupted = False
+        self._assistant_busy = True
+        idle_add(self._pause_converse_silence_timer)
+
+        if self._turn_stale(turn):
+            log.debug("Converse turn %d superseded before LLM", turn)
+            idle_add(self._clear_assistant_busy)
+            return
 
         idle_add(self._set_state, AppState.CONVERSING)
 
@@ -433,9 +518,32 @@ class AverVoxApp:
         stream_fn = getattr(self._llm, "stream_complete", None)
 
         if stream_fn is not None:
-            self._do_stream_converse(stream_fn, model)
+            self._do_stream_converse(stream_fn, model, turn)
         else:
-            self._do_batch_converse(model)
+            self._do_batch_converse(model, turn)
+
+    def _do_terse_farewell(self, turn: int, farewell: str) -> None:
+        """Speak a canned farewell and end the session without an LLM round-trip."""
+        if self._turn_stale(turn):
+            idle_add(self._clear_assistant_busy)
+            return
+        idle_add(self._set_state, AppState.SPEAKING)
+        self._audio.discard_on()
+        try:
+            tts.speak(farewell)
+        except Exception as exc:
+            log.error("Farewell TTS error: %s", exc)
+        if self._turn_stale(turn):
+            idle_add(self._clear_assistant_busy)
+            return
+        log.info("Assistant: %s", farewell)
+        self._converse_history.append({"role": "assistant", "content": farewell})
+        self._last_response = farewell
+        idle_add(self._on_converse_turn_done)
+
+    def _clear_assistant_busy(self) -> bool:
+        self._assistant_busy = False
+        return False
 
     def _on_voice_interrupt(self) -> None:
         """Called from InterruptMonitor thread when speech is detected."""
@@ -443,23 +551,52 @@ class AverVoxApp:
         self._interrupted = True
         tts.stop()
 
+    def _headphones_confirmed(self) -> bool:
+        return bool(self._cfg.converse.interrupt_headphones_confirmed)
+
     def _interrupt_active(self) -> bool:
-        return (self._cfg.converse.interrupt_enabled
-                and self._cfg.converse.interrupt_headphones_confirmed)
+        return (
+            self._cfg.converse.interrupt_enabled
+            and self._headphones_confirmed()
+        )
 
-    def _do_stream_converse(self, stream_fn, model: str) -> None:
-        """Stream LLM response, speaking each sentence as it arrives.
+    def _schedule_early_listen(self) -> None:
+        """Pre-open the mic near the end of TTS (headphones only)."""
+        if (
+            not self._headphones_confirmed()
+            or self._early_listen_armed
+            or self._converse_ending
+        ):
+            return
+        self._early_listen_armed = True
+        idle_add(self._early_converse_listen)
 
-        A single audio stream stays open for the entire response so there
-        are no audible gaps between sentences.
-        """
+    def _early_converse_listen(self) -> bool:
+        if not self._conversing_session or self._state != AppState.SPEAKING:
+            return False
+        log.debug("Early listen — opening mic before TTS finishes")
+        self._early_capture = True
+        self._audio.discard_off()
+        self._set_state(AppState.LISTENING)
+        return False
+
+    def _do_stream_converse(self, stream_fn, model: str, turn: int) -> None:
+        """Stream LLM response, speaking each sentence as it arrives."""
         full_response = ""
+        near_s = self._cfg.converse.early_listen_ms / 1000.0
 
         def _sentences():
             nonlocal full_response
             for sentence in stream_fn(list(self._converse_history), model=model):
+                if self._turn_stale(turn):
+                    break
                 full_response += sentence + " "
                 yield sentence
+
+        if self._turn_stale(turn):
+            log.debug("Converse turn %d superseded before TTS", turn)
+            idle_add(self._clear_assistant_busy)
+            return
 
         monitor = None
         if self._interrupt_active():
@@ -469,20 +606,39 @@ class AverVoxApp:
             )
 
         idle_add(self._set_state, AppState.SPEAKING)
+        self._audio.discard_on()
         if monitor:
             monitor.start()
         try:
-            tts.speak_streamed(_sentences())
+            tts.speak_streamed(
+                _sentences(),
+                on_near_complete=self._schedule_early_listen if self._headphones_confirmed() else None,
+                near_complete_seconds=near_s,
+            )
+        except LLMModelFailure as exc:
+            log.warning("LLM model failure: %s", exc)
+            tts.stop()
+            if monitor:
+                monitor.stop()
+            self._fail_model_and_notify(exc.model, exc.reason, turn)
+            return
         except Exception as exc:
             log.error("LLM/TTS stream error: %s", exc)
             if not full_response:
                 if monitor:
                     monitor.stop()
-                idle_add(self._enter_error_state)
+                if not self._turn_stale(turn):
+                    idle_add(self._enter_error_state)
+                idle_add(self._clear_assistant_busy)
                 return
         finally:
             if monitor:
                 monitor.stop()
+
+        if self._turn_stale(turn):
+            log.debug("Converse turn %d superseded — discarding response", turn)
+            idle_add(self._clear_assistant_busy)
+            return
 
         if self._interrupted:
             self._interrupted = False
@@ -492,6 +648,7 @@ class AverVoxApp:
                 self._converse_history.append(
                     {"role": "assistant", "content": full_response})
                 self._last_response = full_response
+            idle_add(self._clear_assistant_busy)
             idle_add(self._converse_rearm)
             return
 
@@ -502,17 +659,81 @@ class AverVoxApp:
             self._last_response = full_response
         idle_add(self._on_converse_turn_done)
 
-    def _do_batch_converse(self, model: str) -> None:
+    def _fail_model_and_notify(self, model: str, reason: str, turn: int) -> None:
+        """Disable a failed model, unload it, and tell the user."""
+        if self._turn_stale(turn):
+            idle_add(self._clear_assistant_busy)
+            return
+        abort = getattr(self._llm, "abort_model", None)
+        if abort is not None:
+            try:
+                abort(model)
+            except Exception as exc:
+                log.debug("Model abort failed: %s", exc)
+        else:
+            from .llm_control import abort_and_unload
+            prof = self._cfg.llm
+            abort_and_unload(prof.api_base, prof.api_key, model)
+
+        catalog: list[str] = []
+        list_fn = getattr(self._llm, "list_models", None)
+        if list_fn is not None:
+            try:
+                catalog = list_fn()
+            except Exception as exc:
+                log.debug("Could not list models: %s", exc)
+        alts = self._cfg.mark_model_failed(model, reason, catalog)
+        self._cfg.save()
+        log.warning("Model disabled: %s — %s", model, reason)
+
+        short = model.rsplit("/", 1)[-1]
+        if alts:
+            alt_short = alts[0].rsplit("/", 1)[-1]
+            notify_body = f"{short} was disabled ({reason}). Try {alt_short} in Settings."
+            spoken = (
+                f"Sorry, {short} stopped responding. "
+                f"Please try {alt_short} in Settings."
+            )
+        else:
+            notify_body = f"{short} was disabled ({reason}). Choose another model in Settings."
+            spoken = f"Sorry, {short} stopped responding. Please choose another model in Settings."
+
+        _notify("Model failed", notify_body)
+        self._sync_tray_profiles()
+        threading.Thread(
+            target=self._speak_notice,
+            args=(spoken,),
+            daemon=True,
+            name="model-fail-notice",
+        ).start()
+        idle_add(self._clear_assistant_busy)
+        idle_add(self._converse_rearm)
+
+    def _speak_notice(self, text: str) -> None:
+        try:
+            tts.speak(text)
+        except Exception as exc:
+            log.debug("Notice TTS failed: %s", exc)
+
+    def _do_batch_converse(self, model: str, turn: int) -> None:
         """Non-streaming fallback: wait for full response, then speak."""
         try:
             response = self._llm.complete(list(self._converse_history), model=model)
         except Exception as exc:
             log.error("LLM error: %s", exc)
-            idle_add(self._enter_error_state)
+            if not self._turn_stale(turn):
+                idle_add(self._enter_error_state)
+            idle_add(self._clear_assistant_busy)
+            return
+
+        if self._turn_stale(turn):
+            log.debug("Converse turn %d superseded after LLM", turn)
+            idle_add(self._clear_assistant_busy)
             return
 
         if not response:
             log.info("LLM returned empty response")
+            idle_add(self._clear_assistant_busy)
             if self._conversing_session:
                 idle_add(self._converse_rearm)
             else:
@@ -531,18 +752,30 @@ class AverVoxApp:
             )
 
         idle_add(self._set_state, AppState.SPEAKING)
+        self._audio.discard_on()
         if monitor:
             monitor.start()
+        near_s = self._cfg.converse.early_listen_ms / 1000.0
         try:
-            tts.speak(response)
+            tts.speak_streamed(
+                [response],
+                on_near_complete=self._schedule_early_listen if self._headphones_confirmed() else None,
+                near_complete_seconds=near_s,
+            )
         except Exception as exc:
             log.error("TTS error: %s", exc)
         finally:
             if monitor:
                 monitor.stop()
 
+        if self._turn_stale(turn):
+            log.debug("Converse turn %d superseded — discarding response", turn)
+            idle_add(self._clear_assistant_busy)
+            return
+
         if self._interrupted:
             self._interrupted = False
+            idle_add(self._clear_assistant_busy)
             idle_add(self._converse_rearm)
             return
 
@@ -550,8 +783,20 @@ class AverVoxApp:
 
     def _on_converse_turn_done(self) -> bool:
         """Called on main thread after a converse turn's TTS finishes."""
+        self._assistant_busy = False
         if self._conversing_session and not self._converse_ending:
-            timeout_add(self._cfg.converse.rearm_delay_ms, self._converse_rearm)
+            if self._early_listen_armed and self._state == AppState.LISTENING:
+                self._early_listen_armed = False
+                self._early_capture = False
+                self._arm_converse_timer()
+                return False
+            self._early_listen_armed = False
+            self._early_capture = False
+            delay = 0 if self._headphones_confirmed() else self._cfg.converse.rearm_delay_ms
+            if delay <= 0:
+                self._converse_rearm()
+            else:
+                timeout_add(delay, self._converse_rearm)
         else:
             self._end_converse_session()
         return False
@@ -585,11 +830,16 @@ class AverVoxApp:
         self._speech, self._insert, self._llm = create_services(cfg)
         old_llm.shutdown()
 
-        self._speech.configure(model=cfg.stt.model, language=cfg.stt.language)
+        self._speech.configure(
+            model=cfg.stt.model,
+            language=cfg.stt.language,
+            device=cfg.stt.device,
+        )
         tts.configure(voice_model=cfg.tts.voice_model)
         self._audio.configure(
             aggressiveness=cfg.audio.vad_aggressiveness,
-            silence_duration_ms=cfg.audio.silence_duration_ms,
+            dictate_pause_ms=cfg.dictate.interim_pause_ms,
+            converse_end_ms=cfg.converse.end_of_turn_ms,
         )
         self._sync_tray_profiles()
 
@@ -701,10 +951,7 @@ def _notify(title: str, body: str = "") -> None:
 
 
 def _notify_config_reloaded(listen_hotkey: str, speak_hotkey: str) -> None:
-    """Send a desktop notification after a successful config reload.
-
-    Degrades silently when ``notify-send`` is not installed.
-    """
+    """Send a desktop notification after a successful config reload."""
     body = f"Listen: {listen_hotkey}  |  Speak: {speak_hotkey}"
     try:
         subprocess.run(
@@ -716,12 +963,7 @@ def _notify_config_reloaded(listen_hotkey: str, speak_hotkey: str) -> None:
 
 
 def _notify_config_reload_failed(exc: BaseException, *, rolled_back: bool = False) -> None:
-    """Send a desktop notification after a failed config reload.
-
-    When *rolled_back* is True the body notes that the previous config was
-    restored successfully.  Degrades silently when ``notify-send`` is not
-    installed.
-    """
+    """Send a desktop notification after a failed config reload."""
     summary = type(exc).__name__ + ": " + str(exc)
     if len(summary) > 200:
         summary = summary[:197] + "..."

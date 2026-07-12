@@ -94,7 +94,12 @@ tts:
 
 audio:
   vad_aggressiveness: 2
-  silence_duration_ms: 1000  # Dictate interim + Converse (Settings → Dictate)
+
+dictate:
+  interim_pause_ms: 1000
+
+converse:
+  end_of_turn_ms: 1100
 
 backends:
   text_inserter: xdotool

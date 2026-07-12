@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import logging
-from copy import deepcopy
 from dataclasses import dataclass, field, fields, asdict
 from pathlib import Path
 from typing import Optional
@@ -28,6 +27,7 @@ class HotkeysConfig:
 class STTConfig:
     model: str = "base"
     language: str = "en"
+    device: str = "auto"  # auto | cpu | cuda
 
 
 @dataclass
@@ -37,8 +37,12 @@ class TTSConfig:
 
 @dataclass
 class AudioConfig:
-    vad_aggressiveness: int = 2  # speech/silence sensitivity (Dictate interim + Converse)
-    silence_duration_ms: int = 1000  # pause before interim insert / Converse end-of-turn
+    vad_aggressiveness: int = 1
+
+
+@dataclass
+class DictateConfig:
+    interim_pause_ms: int = 1000
 
 
 @dataclass
@@ -58,13 +62,18 @@ class LLMProfile:
 
 @dataclass
 class ConverseConfig:
+    end_of_turn_ms: int = 1100
     silence_timeout_ms: int = 7000
     rearm_delay_ms: int = 250
+    early_listen_ms: int = 300
     goodbye_phrases: list[str] = field(default_factory=lambda: [
-        "talk to you later", "goodbye", "bye bye", "see you later",
+        "talk to you later", "talk soon", "we'll talk soon",
+        "goodbye", "bye bye", "bye for now",
+        "see you later", "see you soon", "catch you later",
         "that's all", "good night", "i'm done",
     ])
     interrupt_enabled: bool = False
+    interrupt_mode: str = "vad"  # OSS: VAD only (legacy wake_word configs migrate to vad)
     interrupt_headphones_confirmed: bool = False
 
 
@@ -74,10 +83,12 @@ class AppConfig:
     stt: STTConfig = field(default_factory=STTConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
+    dictate: DictateConfig = field(default_factory=DictateConfig)
     backends: BackendsConfig = field(default_factory=BackendsConfig)
     converse: ConverseConfig = field(default_factory=ConverseConfig)
     llm_active: str = ""
     llm_profiles: dict[str, LLMProfile] = field(default_factory=dict)
+    disabled_models: dict[str, str] = field(default_factory=dict)
 
     @property
     def llm(self) -> LLMProfile:
@@ -95,11 +106,32 @@ class AppConfig:
         if name in self.llm_profiles:
             self.llm_active = name
 
+    def mark_model_failed(
+        self, model_id: str, reason: str, catalog: list[str] | None = None,
+    ) -> list[str]:
+        """Disable a model; return other enabled model ids from *catalog*."""
+        self.disabled_models[model_id] = reason
+        if not catalog:
+            return []
+        disabled = set(self.disabled_models)
+        return [m for m in catalog if m not in disabled]
+
+    def clear_disabled_models(self) -> list[str]:
+        """Re-enable all disabled models; return cleared model ids."""
+        cleared = list(self.disabled_models)
+        self.disabled_models.clear()
+        return cleared
+
+    def is_model_enabled(self, model_id: str) -> bool:
+        return model_id not in self.disabled_models
+
     def save(self, path: Path = CONFIG_FILE) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {}
-        for sect in ("hotkeys", "stt", "tts", "audio", "backends", "converse"):
+        for sect in ("hotkeys", "stt", "tts", "audio", "dictate", "backends", "converse"):
             data[sect] = asdict(getattr(self, sect))
+
+        data["disabled_models"] = dict(self.disabled_models)
 
         if self.llm_profiles:
             profiles_out = {}
@@ -154,12 +186,17 @@ class AppConfig:
             "stt": (STTConfig, "stt"),
             "tts": (TTSConfig, "tts"),
             "audio": (AudioConfig, "audio"),
+            "dictate": (DictateConfig, "dictate"),
             "backends": (BackendsConfig, "backends"),
             "converse": (ConverseConfig, "converse"),
         }
         for key, (dc_cls, attr) in section_map.items():
             if key in data:
                 setattr(cfg, attr, _merge(dc_cls, data[key]))
+
+        disabled = data.get("disabled_models")
+        if isinstance(disabled, dict):
+            cfg.disabled_models = {str(k): str(v) for k, v in disabled.items()}
 
         llm_data = data.get("llm", {})
         if isinstance(llm_data, dict) and "profiles" in llm_data:
@@ -175,6 +212,21 @@ class AppConfig:
                 profile.label = profile.api_base or "Default"
             cfg.llm_profiles[slug] = profile
             cfg.llm_active = slug
+
+        converse_data = data.get("converse", {})
+        if isinstance(converse_data, dict) and "interrupt_mode" not in converse_data:
+            if converse_data.get("interrupt_headphones_confirmed"):
+                cfg.converse.interrupt_mode = "vad"
+
+        # Migrate legacy audio.silence_duration_ms → dictate + converse keys
+        audio_data = data.get("audio", {})
+        if isinstance(audio_data, dict):
+            legacy_pause = audio_data.get("silence_duration_ms")
+            if legacy_pause is not None:
+                if "dictate" not in data:
+                    cfg.dictate.interim_pause_ms = int(legacy_pause)
+                if isinstance(converse_data, dict) and "end_of_turn_ms" not in converse_data:
+                    cfg.converse.end_of_turn_ms = min(int(legacy_pause), 1200)
 
         return cfg
 

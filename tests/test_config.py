@@ -12,6 +12,8 @@ from avervox.config import (
     AppConfig,
     AudioConfig,
     BackendsConfig,
+    ConverseConfig,
+    DictateConfig,
     HotkeysConfig,
     STTConfig,
     TTSConfig,
@@ -42,6 +44,7 @@ class TestDefaultConfig:
         cfg = AppConfig()
         assert cfg.stt.model == "base"
         assert cfg.stt.language == "en"
+        assert cfg.stt.device == "auto"
 
     def test_default_tts(self):
         cfg = AppConfig()
@@ -49,8 +52,15 @@ class TestDefaultConfig:
 
     def test_default_audio(self):
         cfg = AppConfig()
-        assert cfg.audio.vad_aggressiveness == 2
-        assert cfg.audio.silence_duration_ms == 1000
+        assert cfg.audio.vad_aggressiveness == 1
+
+    def test_default_dictate(self):
+        cfg = AppConfig()
+        assert cfg.dictate.interim_pause_ms == 1000
+
+    def test_default_converse_end_of_turn(self):
+        cfg = AppConfig()
+        assert cfg.converse.end_of_turn_ms == 1100
 
     def test_default_backends(self):
         cfg = AppConfig()
@@ -63,6 +73,8 @@ class TestDefaultConfig:
         assert isinstance(cfg.stt, STTConfig)
         assert isinstance(cfg.tts, TTSConfig)
         assert isinstance(cfg.audio, AudioConfig)
+        assert isinstance(cfg.dictate, DictateConfig)
+        assert isinstance(cfg.converse, ConverseConfig)
         assert isinstance(cfg.backends, BackendsConfig)
 
 
@@ -73,12 +85,13 @@ class TestDefaultConfig:
 class TestLoadValidYAML:
     def test_loads_stt_overrides(self, tmp_path):
         cfg_file = tmp_path / "config.yaml"
-        write_yaml(cfg_file, {"stt": {"model": "large-v2", "language": "fr"}})
+        write_yaml(cfg_file, {"stt": {"model": "large-v2", "language": "fr", "device": "cuda"}})
 
         cfg = AppConfig.load(cfg_file)
 
         assert cfg.stt.model == "large-v2"
         assert cfg.stt.language == "fr"
+        assert cfg.stt.device == "cuda"
 
     def test_loads_hotkeys_overrides(self, tmp_path):
         cfg_file = tmp_path / "config.yaml"
@@ -91,12 +104,20 @@ class TestLoadValidYAML:
 
     def test_loads_audio_overrides(self, tmp_path):
         cfg_file = tmp_path / "config.yaml"
-        write_yaml(cfg_file, {"audio": {"vad_aggressiveness": 3, "silence_duration_ms": 500}})
+        write_yaml(cfg_file, {"audio": {"vad_aggressiveness": 3}})
 
         cfg = AppConfig.load(cfg_file)
 
         assert cfg.audio.vad_aggressiveness == 3
-        assert cfg.audio.silence_duration_ms == 500
+
+    def test_migrates_legacy_silence_duration_ms(self, tmp_path):
+        cfg_file = tmp_path / "config.yaml"
+        write_yaml(cfg_file, {"audio": {"silence_duration_ms": 1500}})
+
+        cfg = AppConfig.load(cfg_file)
+
+        assert cfg.dictate.interim_pause_ms == 1500
+        assert cfg.converse.end_of_turn_ms == 1200
 
     def test_loads_tts_overrides(self, tmp_path):
         cfg_file = tmp_path / "config.yaml"
@@ -132,7 +153,7 @@ class TestLoadValidYAML:
         cfg = AppConfig.load(cfg_file)
 
         assert cfg.hotkeys.listen == "<ctrl>+<alt>+space"
-        assert cfg.audio.vad_aggressiveness == 2
+        assert cfg.audio.vad_aggressiveness == 1
         assert cfg.backends.text_inserter == "xdotool"
 
 
@@ -187,7 +208,7 @@ class TestUnknownKeyWarnings:
         write_yaml(cfg_file, {"hotkeys": {"listem": "<ctrl>+<alt>+space"}})
 
         with caplog.at_level(logging.WARNING, logger="avervox.config"):
-            cfg = AppConfig.load(cfg_file)
+            AppConfig.load(cfg_file)
 
         assert any("listem" in msg for msg in caplog.messages)
 
@@ -242,7 +263,7 @@ class TestMissingOrEmptyFile:
 
         assert isinstance(cfg, AppConfig)
         assert cfg.hotkeys.listen == "<ctrl>+<alt>+space"
-        assert cfg.audio.vad_aggressiveness == 2
+        assert cfg.audio.vad_aggressiveness == 1
 
     def test_whitespace_only_file_returns_defaults(self, tmp_path):
         cfg_file = tmp_path / "config.yaml"
@@ -263,3 +284,67 @@ class TestMissingOrEmptyFile:
         assert isinstance(data, dict)
         assert "stt" in data
         assert "hotkeys" in data
+
+
+# ---------------------------------------------------------------------------
+# Disabled models (OSS AppConfig-level)
+# ---------------------------------------------------------------------------
+
+class TestDisabledModels:
+    def test_mark_model_failed_keeps_other_models(self):
+        cfg = AppConfig()
+        alts = cfg.mark_model_failed(
+            "bad-model", "empty response after 162s",
+            catalog=["bad-model", "good-model"],
+        )
+        assert alts == ["good-model"]
+        assert cfg.disabled_models["bad-model"] == "empty response after 162s"
+        assert not cfg.is_model_enabled("bad-model")
+        assert cfg.is_model_enabled("good-model")
+
+    def test_clear_disabled_models_on_startup(self):
+        cfg = AppConfig()
+        cfg.disabled_models = {
+            "bad-model": "no usable output within 30s",
+            "other-bad": "empty response after 45s",
+        }
+        cleared = cfg.clear_disabled_models()
+        assert set(cleared) == {"bad-model", "other-bad"}
+        assert cfg.is_model_enabled("bad-model")
+        assert cfg.is_model_enabled("other-bad")
+        assert cfg.clear_disabled_models() == []
+
+
+# ---------------------------------------------------------------------------
+# Converse barge-in config
+# ---------------------------------------------------------------------------
+
+class TestConverseBargeInConfig:
+    def test_default_interrupt_mode_is_vad(self):
+        cfg = AppConfig()
+        assert cfg.converse.interrupt_mode == "vad"
+        assert cfg.converse.interrupt_enabled is False
+        assert cfg.converse.interrupt_headphones_confirmed is False
+
+    def test_migrates_vad_mode_when_headphones_confirmed_without_mode(self, tmp_path):
+        cfg_file = tmp_path / "config.yaml"
+        write_yaml(cfg_file, {
+            "converse": {
+                "interrupt_enabled": True,
+                "interrupt_headphones_confirmed": True,
+            },
+        })
+        cfg = AppConfig.load(cfg_file)
+        assert cfg.converse.interrupt_mode == "vad"
+        assert cfg.converse.interrupt_headphones_confirmed is True
+
+    def test_explicit_interrupt_mode_preserved(self, tmp_path):
+        cfg_file = tmp_path / "config.yaml"
+        write_yaml(cfg_file, {
+            "converse": {
+                "interrupt_mode": "vad",
+                "interrupt_headphones_confirmed": True,
+            },
+        })
+        cfg = AppConfig.load(cfg_file)
+        assert cfg.converse.interrupt_mode == "vad"

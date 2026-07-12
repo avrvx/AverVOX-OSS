@@ -10,7 +10,7 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Generator, Iterable, Optional
+from typing import Callable, Generator, Iterable, Optional
 
 import numpy as np
 
@@ -181,12 +181,21 @@ def speak(text: str) -> None:
         log.error("TTS playback error: %s", exc)
 
 
-def speak_streamed(sentences: Iterable[str]) -> None:
+def speak_streamed(
+    sentences: Iterable[str],
+    *,
+    on_near_complete: Callable[[], None] | None = None,
+    near_complete_seconds: float = 0.3,
+) -> None:
     """Synthesize and play an iterable of sentences as continuous audio.
 
     Keeps a single audio stream open for the entire sequence, eliminating
     inter-sentence gaps.  A background thread handles synthesis so the next
     sentence is ready before the current one finishes playing.
+
+    If *on_near_complete* is set, it is called once when roughly
+    *near_complete_seconds* of audio remain in the output buffer (used to
+    pre-open the mic before TTS finishes).
 
     If the *sentences* iterator raises, playback finishes with whatever audio
     is already queued and the exception is re-raised to the caller.
@@ -202,8 +211,36 @@ def speak_streamed(sentences: Iterable[str]) -> None:
     audio_queue: queue.Queue = queue.Queue(maxsize=16)
     sample_rate = backend.sample_rate
 
-    state = {"leftover": np.empty(0, dtype=np.float32), "done": False}
+    state = {
+        "leftover": np.empty(0, dtype=np.float32),
+        "done": False,
+        "synth_finished": False,
+        "remaining": 0,
+        "peak_remaining": 0,
+        "near_fired": False,
+    }
     synth_error: list[BaseException] = []
+    near_threshold = max(1, int(near_complete_seconds * sample_rate))
+
+    def _note_remaining(delta: int) -> None:
+        if delta > 0:
+            state["remaining"] += delta
+            if state["remaining"] > state["peak_remaining"]:
+                state["peak_remaining"] = state["remaining"]
+
+    def _check_near_complete() -> None:
+        if (
+            on_near_complete is not None
+            and not state["near_fired"]
+            and state["synth_finished"]
+            and state["peak_remaining"] > near_threshold
+            and state["remaining"] <= near_threshold
+        ):
+            state["near_fired"] = True
+            try:
+                on_near_complete()
+            except Exception as exc:
+                log.debug("on_near_complete callback error: %s", exc)
 
     def _callback(outdata: np.ndarray, frames: int, _time, _status) -> None:
         import sounddevice as sd
@@ -230,6 +267,9 @@ def speak_streamed(sentences: Iterable[str]) -> None:
 
         state["leftover"] = buf
         outdata[:, 0] = result
+        if written:
+            state["remaining"] = max(0, state["remaining"] - written)
+            _check_near_complete()
 
         if state["done"] and len(state["leftover"]) == 0:
             raise sd.CallbackStop()
@@ -239,6 +279,12 @@ def speak_streamed(sentences: Iterable[str]) -> None:
         while not _stop_event.is_set():
             try:
                 audio_queue.put(item, timeout=0.05)
+                if item is _DONE:
+                    state["synth_finished"] = True
+                    _check_near_complete()
+                elif isinstance(item, np.ndarray):
+                    _note_remaining(len(item))
+                    _check_near_complete()
                 return True
             except queue.Full:
                 continue

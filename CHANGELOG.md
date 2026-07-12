@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.9 - 2026-07-12
+
+- Config: split `dictate.interim_pause_ms` and `converse.end_of_turn_ms` (default 1100 ms); legacy `audio.silence_duration_ms` migrates automatically.
+- Converse latency and stability improvements (streaming turn handling, end-of-turn tuning, early-listen gating).
+- STT: optional GPU auto-detect (`stt.device: auto`).
+- LLM: model health checks during Converse (30 s first-token timeout, empty response, stream stall); misbehaving models disabled for the session and re-enabled on next app start.
+- Documentation: updated configuration reference, performance tuning, and LLM model health section.
+
 ## 0.3.8 - 2026-06-28
 
 - Version alignment with AverVOX Pro 0.3.8 (no user-facing OSS changes in this release).

@@ -1,4 +1,4 @@
-"""Speech-to-Text via faster-whisper (local, CPU).
+"""Speech-to-Text via faster-whisper (local CPU or optional CUDA).
 
 Provides: listen(audio) -> text
 Model is pre-loaded at startup to avoid import conflicts with audio threads.
@@ -22,6 +22,9 @@ except ImportError:
 _model = None
 _model_size: str = "base"
 _language: str = "en"
+_device_pref: str = "auto"
+_resolved_device: str = "cpu"
+_resolved_compute: str = "int8"
 
 # Silero VAD settings for long Dictate recordings (speech with pauses).
 _LONG_FORM_VAD = {
@@ -31,11 +34,12 @@ _LONG_FORM_VAD = {
 }
 
 
-def configure(model: str = "base", language: str = "en") -> None:
-    """Set the model size and language. Call before listen()."""
-    global _model_size, _language, _model
+def configure(model: str = "base", language: str = "en", device: str = "auto") -> None:
+    """Set the model size, language, and device preference. Call before listen()."""
+    global _model_size, _language, _device_pref, _model
     _model_size = model
     _language = language
+    _device_pref = device or "auto"
     _model = None
 
 
@@ -44,13 +48,35 @@ def preload() -> None:
     _load_model()
 
 
+def _resolve_device(preference: str) -> tuple[str, str]:
+    pref = (preference or "auto").lower()
+    if pref == "cpu":
+        return "cpu", "int8"
+    if pref == "cuda":
+        return "cuda", "float16"
+    # auto — use CUDA when ctranslate2 reports it is available
+    try:
+        import ctranslate2
+        if "cuda" in ctranslate2.get_supported_compute_types("cuda"):
+            return "cuda", "float16"
+    except Exception:
+        pass
+    return "cpu", "int8"
+
+
 def _load_model():
-    global _model
+    global _model, _resolved_device, _resolved_compute
     if _model is None:
         if _WhisperModel is None:
             raise RuntimeError("faster-whisper not installed")
-        log.info("Loading faster-whisper model: %s (CPU, int8)", _model_size)
-        _model = _WhisperModel(_model_size, device="cpu", compute_type="int8")
+        device, compute = _resolve_device(_device_pref)
+        _resolved_device = device
+        _resolved_compute = compute
+        log.info(
+            "Loading faster-whisper model: %s (%s, %s)",
+            _model_size, device, compute,
+        )
+        _model = _WhisperModel(_model_size, device=device, compute_type=compute)
         log.info("faster-whisper model loaded")
     return _model
 

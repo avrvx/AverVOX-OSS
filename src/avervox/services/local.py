@@ -18,9 +18,9 @@ log = get_logger(__name__)
 class LocalSpeechService:
     """Wraps the stt module behind the SpeechService protocol."""
 
-    def configure(self, model: str, language: str) -> None:
+    def configure(self, model: str, language: str, device: str = "auto") -> None:
         from .. import stt
-        stt.configure(model=model, language=language)
+        stt.configure(model=model, language=language, device=device)
 
     def preload(self) -> None:
         from .. import stt

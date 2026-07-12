@@ -1,6 +1,6 @@
 # AverVOX OSS - Give your LLMs a voice.
 Website Edition
-version: 0.3.8
+version: 0.3.9
 
 Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus can receive your speech as text. Select text to have it read aloud. Hold free-form voice conversations with Large Language Models (LLMs) on Linux.
 
@@ -230,21 +230,26 @@ hotkeys:
 stt:
   model: base        # tiny, base, small, medium, large-v3
   language: en
+  device: auto       # auto | cpu | cuda
 
 tts:
   voice_model: ~/.local/share/piper-tts/voices/en_US-lessac-high.onnx
 
 audio:
   vad_aggressiveness: 2       # 0-3 (higher = more aggressive silence detection)
-  silence_duration_ms: 1000   # pause before inserting dictation text (Settings -> Dictate)
+
+dictate:
+  interim_pause_ms: 1000      # pause before inserting dictation text (Settings -> Dictate)
 
 backends:
   text_inserter: xdotool      # xdotool | ydotool - Settings -> Advanced
   selection_provider: xclip   # xclip | xsel | wl-paste
 
 converse:
+  end_of_turn_ms: 1100              # pause after you stop speaking (Settings -> Converse)
   silence_timeout_ms: 7000          # silence before ending conversation (ms)
-  rearm_delay_ms: 250               # pause after TTS before mic reopens (ms)
+  rearm_delay_ms: 250               # pause after TTS before mic reopens (ms; skipped with headphones)
+  early_listen_ms: 300              # pre-open mic before TTS ends (headphones only)
   goodbye_phrases:                  # phrases that end the conversation
     - "talk to you later"
     - "goodbye"
@@ -300,17 +305,63 @@ Adjust **Settings -> Dictate** and **Settings -> Converse** to match your condit
 
 | Setting | Default | Conservative | Where | Effect |
 |---------|---------|-------------|-------|--------|
-| `silence_duration_ms` | **1000** | 1500 | Settings -> Dictate, or `config.yaml` -> `audio` | Dictate: pause before typing an interim chunk. Converse / `avrvx --listen`: end-of-turn delay. |
-| `rearm_delay_ms` | **250** | 500 | `config.yaml` -> `converse` | Pause after TTS finishes before the mic reopens. Prevents echo/feedback. Increase if you hear the speaker feeding back into the mic. |
+| `dictate.interim_pause_ms` | **1000** | 1500 | Settings -> Dictate | Dictate: pause before typing an interim chunk. |
+| `converse.end_of_turn_ms` | **1100** | 1500 | Settings -> Converse | Converse / `avrvx --listen`: end-of-turn delay. |
+| `rearm_delay_ms` | **250** | 500 | `config.yaml` -> `converse` | Pause after TTS before mic reopens (skipped when headphones confirmed). |
 | `silence_timeout_ms` | **7000** | 10000 | `config.yaml` -> `converse` | How long to wait with no speech before ending the conversation. |
 | STT `beam_size` | **1** | 5 | `stt.py` | Greedy (1) is faster; beam search (5) is more accurate for mumbled or technical speech. |
 | STT model | **base** | tiny / small | `config.yaml` -> `stt.model` | `tiny` is fastest, `small`/`medium` more accurate. `base` is a good middle ground. |
 
 **Tips:**
 
-- If Converse turns get clipped (cut off mid-sentence), increase `silence_duration_ms`.
+- If Converse turns get clipped (cut off mid-sentence), increase `converse.end_of_turn_ms`.
 - If you hear echo (AverVOX OSS responding to its own TTS), increase `rearm_delay_ms`.
 - For the fastest possible turns at the cost of some accuracy, use `stt.model: tiny` with `beam_size: 1`.
+
+---
+
+## LLM model health & failure detection
+
+During Converse, AverVOX monitors each LLM stream and reacts when a model misbehaves, so you are not left waiting in silence for a minute or more. These thresholds are **critical for voice UX** — they define how long AverVOX waits before giving up, unloading the model, and switching you to something else.
+
+### What gets checked
+
+| Threshold | Default | Defined in | Triggers when |
+|-----------|---------|------------|---------------|
+| **First-token timeout** | **30 s** | `src/avervox/llm_control.py` → `FIRST_TOKEN_TIMEOUT_S` | No **content** token arrives within this time after the stream request is sent. Empty SSE keepalive chunks (common with LM Studio) do **not** count as output. |
+| **Empty response** | **30 s** | `EMPTY_RESPONSE_MIN_S` | The stream finishes with zero usable content after at least this long. |
+| **Stream read stall** | **90 s** | `STREAM_READ_TIMEOUT_S` | No SSE bytes at all arrive for this long (connection hung). |
+
+The first-token timer starts when AverVOX sends the chat/completions request. That elapsed time includes **model load on the server** (e.g. ~11 s for a cold `gpt-oss-120b` on LM Studio before it can respond) **plus** generation time until the first word of the reply. Set the threshold high enough to tolerate your slowest *healthy* cold start, but low enough to catch models that stall (e.g. 70+ s with no speech).
+
+**Example:** A cold `gpt-oss-120b` that loads in ~11 s and speaks its first word at ~16 s will pass a 30 s threshold. A model that sends keepalive SSE for 70 s before any content will fail at 30 s.
+
+### What happens on failure
+
+1. The in-flight request is aborted and the model is unloaded (LM Studio `/api/v1/models/unload`, or Ollama `keep_alive: 0`).
+2. The model is added to that endpoint's `disabled_models` in `config.yaml`, with the failure reason recorded.
+3. AverVOX speaks a brief notice and suggests other enabled models on the same endpoint.
+4. The dashboard greys out the disabled model.
+
+### Re-enabling a disabled model
+
+Disabled models stay off for the **rest of the current app session** (so a bad model is not retried immediately). **The next time you start AverVOX**, all `disabled_models` entries are cleared automatically and every model is available again.
+
+To re-enable during the same session without restarting, edit `~/.config/avervox/config.yaml` and remove the model from the endpoint's `disabled_models` map, then reload config from the tray menu:
+
+```yaml
+llm:
+  endpoints:
+    my-spark:
+      disabled_models:
+        omnicoder-9b: no usable output within 30s   # delete this entry
+```
+
+Only re-enable a model during the same session if you have fixed the underlying issue (VRAM, quantisation, server hang, etc.).
+
+### Tuning the thresholds
+
+These constants are compile-time defaults in `llm_control.py`. If your largest healthy model needs more than 30 s on a cold start, increase `FIRST_TOKEN_TIMEOUT_S` and rebuild/reinstall. If false positives occur on cold loads, raise the value; if bad models leave you waiting too long, lower it.
 
 ---
 
@@ -322,8 +373,9 @@ Adjust **Settings -> Dictate** and **Settings -> Converse** to match your condit
 | Hotkeys don't work | Check `journalctl --user -f` for pynput/X11 errors. |
 | ALSA/Pulse errors | Make sure PulseAudio or PipeWire is running. |
 | Converse fails | Open Settings, verify the test button shows a green checkmark and models are listed; check the log for `LLM error` entries. |
+| Model greyed out / "disabled" | A failure threshold tripped — see **LLM model health & failure detection** above; check `disabled_models` in config and the log for `LLM model failure`. |
 | Bad transcription | Reduce background noise, move closer to the mic, or switch to a larger STT model (`small`/`medium`). |
-| Conversation ends too early | Increase `silence_duration_ms` or `silence_timeout_ms`; use headphones to limit speaker bleed in loud environments. |
+| Conversation ends too early | Increase `converse.end_of_turn_ms` or `silence_timeout_ms`; use headphones to limit speaker bleed in loud environments. |
 
 Log file: `~/.local/share/avervox/avervox.log`
 
