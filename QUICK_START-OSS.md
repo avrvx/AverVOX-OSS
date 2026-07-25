@@ -1,6 +1,6 @@
 # AverVOX OSS - Quick Start User Guide
 Website Edition
-version: 0.3.9
+version: 0.4.0
 
 AverVOX OSS is a desktop app which runs in the Task Bar. Unless specified otherwise for particular operations described elsewhere in the documentation, we recommend starting the program by clicking the desktop launcher added by the installer to the desktop menu.
 
@@ -99,6 +99,22 @@ OSS uses Piper only (no Kokoro engine or speed control in Settings).
 ### About
 
 Version, description, GitHub link, and MIT license notice. Tray **About AverVOX OSS** opens Settings on this tab.
+
+---
+
+## Using AverVOX OSS from other programs
+
+Other applications can borrow AverVOX's voice instead of calling a cloud speech API. Three commands make that possible:
+
+```bash
+avrvx --synthesize --text "Deployment complete" --output /tmp/reply.wav
+avrvx --transcribe /tmp/voice-message.ogg
+avrvx --capabilities
+```
+
+`--synthesize` writes a WAV file rather than playing it, `--transcribe` turns a recording into text on stdout, and `--capabilities` prints a small JSON description of this install so a host program knows what it is talking to. For sensitive text prefer `--text-file FILE` or `--text -` (read from stdin), because command-line arguments are visible to other users on the machine.
+
+Ready-made integration packages for Hermes Agent, OpenClaw, and Odysseus live in the `integrations/` directory of the source tree.
 
 ---
 

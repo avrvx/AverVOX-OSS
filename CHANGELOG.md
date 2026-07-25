@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 - 2026-07-25
+
+- Bridge CLI: `avrvx --synthesize` writes speech to a WAV file (`--text`, `--text-file`, or stdin via `--text -`), `avrvx --transcribe FILE` prints a transcript, and `avrvx --capabilities` emits a JSON capability probe (edition, engines, features) for host integrations.
+- Synthesized WAV files are created mode `0600`; the output directory must already exist.
+- TTS: new `synthesize_to_file()`; STT: new `transcribe_file()`.
+- Integrations: plugin packages for Hermes Agent and OpenClaw plus an Odysseus guide, all built on the bridge CLI.
+- Documentation: bridge CLI reference in README, DOCS, and the quick start guide.
+
 ## 0.3.9 - 2026-07-12
 
 - Config: split `dictate.interim_pause_ms` and `converse.end_of_turn_ms` (default 1100 ms); legacy `audio.silence_duration_ms` migrates automatically.

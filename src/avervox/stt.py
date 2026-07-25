@@ -1,10 +1,12 @@
 """Speech-to-Text via faster-whisper (local CPU or optional CUDA).
 
-Provides: listen(audio) -> text
+Provides: listen(audio) -> text, transcribe_file(path) -> text
 Model is pre-loaded at startup to avoid import conflicts with audio threads.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import numpy as np
 
@@ -139,4 +141,35 @@ def listen(
     else:
         log.debug("Transcribed (%s): %d chars", info.language, len(text))
 
+    return text.strip()
+
+
+def transcribe_file(path: str | Path, *, long_form: bool = True) -> str:
+    """Transcribe an audio file on disk. Returns recognized text.
+
+    Used by host integrations that pass voice-message / recording files
+    rather than live mic capture via :func:`listen`.
+    """
+    model = _load_model()
+    audio_path = Path(path).expanduser().resolve()
+    if not audio_path.is_file():
+        raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+    if long_form:
+        transcribe_kwargs = {
+            "language": _language or None,
+            "beam_size": 5,
+            "vad_filter": True,
+            "vad_parameters": dict(_LONG_FORM_VAD),
+        }
+    else:
+        transcribe_kwargs = {
+            "language": _language or None,
+            "beam_size": 1,
+            "vad_filter": False,
+        }
+
+    segments, info = model.transcribe(str(audio_path), **transcribe_kwargs)
+    text = " ".join(seg.text.strip() for seg in segments if seg.text.strip())
+    log.debug("Transcribed file %s (%s): %d chars", audio_path.name, info.language, len(text))
     return text.strip()

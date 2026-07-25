@@ -1,7 +1,7 @@
 # AverVOX OSS - Documentation
 Technical reference for AverVOX OSS (free).
 Website Edition
-version: 0.3.9
+version: 0.4.0
 
 For a quick overview and install, see
 [README.md](README.md).
@@ -16,6 +16,7 @@ For a quick overview and install, see
 | Speak selection (`Ctrl+Alt+S`) | Yes | Yes |
 | Converse (`Ctrl+Alt+C`) | Yes | Yes |
 | CLI (`avrvx --listen`, `--speak`) | Yes | Yes |
+| Bridge CLI (`--synthesize`, `--transcribe`, `--capabilities`) | Yes | Yes |
 | Piper TTS | Yes | Yes |
 | faster-whisper STT | Yes | Yes |
 | Voice interrupt | Yes | Yes |
@@ -27,6 +28,7 @@ For a quick overview and install, see
 | System prompts (per profile) | | Yes |
 | Session memory (survives restart) | | Yes |
 | LAN client/server (`avrvx --serve`) | | Yes |
+| Dashboard (endpoints, models, profiles) | | Yes |
 
 Pro-only features (Kokoro TTS, wake word, session memory, LAN, and more) are
 listed in the edition matrix above. AverVOX Pro is distributed separately - not
@@ -82,6 +84,57 @@ Right-click the tray icon for:
 - **Open Log** - open `avervox.log` in your default text viewer
 - **About AverVOX OSS** - version, tagline, and links
 - **Quit AverVOX OSS**
+
+## Bridge CLI
+
+Three commands let other programs use AverVOX as their local speech engine.
+Unlike `--speak` and `--listen`, they exchange files and JSON instead of
+driving the speakers and microphone directly.
+
+```bash
+# Synthesize to a WAV file instead of playing it
+avrvx --synthesize --text "Deployment complete" --output /tmp/reply.wav
+avrvx --synthesize --text-file /tmp/reply.txt --output /tmp/reply.wav
+echo "Deployment complete" | avrvx --synthesize --text - --output /tmp/reply.wav
+
+# Transcribe an existing recording or voice message
+avrvx --transcribe /tmp/voice-message.ogg
+
+# Ask what this install can do (JSON on stdout)
+avrvx --capabilities
+```
+
+| Command | Behaviour |
+|---------|-----------|
+| `--synthesize` | Requires `--output PATH`. Writes mono 16-bit PCM WAV at the engine's sample rate, mode `0600`, and prints the path on stdout. The output directory must already exist. Exits 2 without `--output`, 1 with no text. |
+| `--transcribe AUDIO` | Prints the transcript on stdout; exits 1 when no speech was found. Any format ffmpeg can decode works. |
+| `--capabilities` | Prints a JSON object on stdout. Diagnostics go to stderr, so piping into a parser is always safe. |
+
+Text sources for `--synthesize`, in priority order: `--text-file PATH`,
+`--text "literal"`, `--text -` (stdin), or bare stdin when it is not a TTY.
+Prefer a file or stdin for anything sensitive - command-line arguments are
+visible to other users in the process list.
+
+`--capabilities` output:
+
+```json
+{
+  "product": "avervox-oss",
+  "edition": "oss",
+  "licensed": true,
+  "version": "0.4.0",
+  "cli": "avrvx",
+  "tts": {"engines": ["piper"], "active_engine": "piper", "synthesize_to_file": true, "formats": ["wav"]},
+  "stt": {"engine": "faster-whisper", "model": "base", "transcribe_file": true, "listen_mic": true},
+  "features": {"speak_playback": true, "listen_mic": true, "synthesize": true, "transcribe": true,
+               "serve": false, "wake_word": false, "session_memory": false, "kokoro": false}
+}
+```
+
+Host integrations read `edition` and `features` to detect OSS versus Pro rather
+than shipping separate builds. Treat these field names as a stable contract.
+Ready-made integration packages for Hermes Agent and OpenClaw, plus an
+Odysseus guide, live under `integrations/`.
 
 ## Converse mode
 
@@ -210,7 +263,7 @@ keys from older configs still load until you save settings again.
 ```
 src/avervox/
 ├── __init__.py          # package metadata
-├── __main__.py          # CLI entry point (--listen, --speak, --version, or GUI)
+├── __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --version, or GUI)
 ├── main.py              # GUI controller (state machine, hotkey handlers, notifications)
 ├── config.py            # configuration loading, LLM profiles, dataclasses
 ├── audio.py             # microphone capture + VAD/recorder + interrupt monitor

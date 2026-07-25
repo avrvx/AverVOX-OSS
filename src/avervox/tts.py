@@ -1,14 +1,17 @@
 """Text-to-Speech engine (Piper).
 
-Public API: configure(), preload(), speak(), speak_streamed(), stop()
+Public API: configure(), preload(), speak(), speak_streamed(),
+synthesize_to_file(), stop()
 """
 
 from __future__ import annotations
 
+import os
 import queue
 import re
 import threading
 import time
+import wave
 from pathlib import Path
 from typing import Callable, Generator, Iterable, Optional
 
@@ -94,6 +97,43 @@ def _load_backend() -> Optional[_PiperBackend]:
 def preload() -> None:
     """Eagerly load the TTS model (call from main thread at startup)."""
     _load_backend()
+
+
+def synthesize_to_file(text: str, output_path: str | Path) -> Path:
+    """Synthesize *text* to a mono PCM16 WAV file. Returns the resolved path."""
+    text = _strip_markdown(text)
+    if not text:
+        raise ValueError("No text to synthesize")
+
+    backend = _load_backend()
+    if backend is None:
+        raise RuntimeError("TTS not available — no engine configured")
+
+    chunks: list[np.ndarray] = []
+    for samples in backend.synthesize(text):
+        if samples is not None and len(samples) > 0:
+            chunks.append(np.asarray(samples, dtype=np.float32).reshape(-1))
+    if not chunks:
+        raise RuntimeError("TTS produced no audio")
+
+    audio = np.concatenate(chunks)
+    path = Path(output_path).expanduser().resolve()
+    if not path.parent.is_dir():
+        raise NotADirectoryError(f"Output directory does not exist: {path.parent}")
+
+    pcm = np.clip(audio, -1.0, 1.0)
+    pcm_i16 = (pcm * 32767.0).astype(np.int16)
+    # 0600: host integrations write these into shared temp dirs.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "wb") as raw, wave.open(raw, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(int(backend.sample_rate))
+        wf.writeframes(pcm_i16.tobytes())
+
+    log.debug("Wrote TTS WAV: %s (%d samples @ %d Hz)", path, len(pcm_i16), backend.sample_rate)
+    return path
 
 
 def speak(text: str) -> None:

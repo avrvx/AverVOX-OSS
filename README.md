@@ -1,6 +1,6 @@
 # AverVOX OSS - Give your LLMs a voice.
 Website Edition
-version: 0.3.9
+version: 0.4.0
 
 Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus can receive your speech as text. Select text to have it read aloud. Hold free-form voice conversations with Large Language Models (LLMs) on Linux.
 
@@ -10,6 +10,7 @@ Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus
   - Hosted locally (on the same computer or another device on your LAN), **or**
   - Accessed remotely via any inference provider you choose (OpenAI, LocalAI, vLLM, SGLang, LM Studio, Ollama, Hermes Agent, OpenClaw, etc.).
 - **Tray app + command-line interface** - A system-tray GUI for everyday use and a CLI tool (`avrvx`) for scripting and automation.
+- **Speech engine for other apps** - `avrvx --synthesize`, `--transcribe`, and `--capabilities` let tools such as Hermes Agent and OpenClaw hand their text and recordings to AverVOX instead of a cloud speech API.
 - **Piper TTS** - Fast, low-resource local speech synthesis.
 - **Multiple LLM profiles** - Define named endpoints and switch between them instantly via the tray menu.
 - **XDG-compliant configuration** - All settings are stored in YAML files under `~/.config/avervox/`; no extra dotfiles clutter your home directory.
@@ -22,6 +23,7 @@ Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus
 | Text-to-Speech (`Ctrl+Alt+S`) | Yes | Yes |
 | Converse (`Ctrl+Alt+C`) | Yes | Yes |
 | CLI (`avrvx --listen`, `--speak`) | Yes | Yes |
+| Bridge CLI (`--synthesize`, `--transcribe`, `--capabilities`) | Yes | Yes |
 | Piper TTS | Yes | Yes |
 | faster-whisper STT | Yes | Yes |
 | Voice interrupt | Yes | Yes |
@@ -33,6 +35,7 @@ Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus
 | System prompts (per profile) | | Yes |
 | Session memory (survives restart) | | Yes |
 | LAN client/server (`avrvx --serve`) | | Yes |
+| Dashboard (endpoints, models, profiles) | | Yes |
 
 AverVOX OSS is free and open-source. For issues and questions, please open an issue on the project repository. If you want the Pro-only features above (Kokoro TTS, wake word, session memory, LAN, and more), see [AverVOX Pro](https://avervoxpro.com/) - a one-time, no-subscription companion app, distributed separately (not on GitHub or PyPI).
 
@@ -121,6 +124,32 @@ avrvx --version
 avrvx --listen | my-llm-tool | avrvx --speak
 ```
 
+### Bridge CLI (for other applications)
+
+Three commands let other programs use AverVOX as their local speech engine without embedding anything. Unlike `--speak` and `--listen`, they exchange files and JSON instead of driving your speakers and microphone directly.
+
+```bash
+# Synthesize to a WAV file instead of playing it
+avrvx --synthesize --text "Deployment complete" --output /tmp/reply.wav
+avrvx --synthesize --text-file /tmp/reply.txt --output /tmp/reply.wav
+echo "Deployment complete" | avrvx --synthesize --text - --output /tmp/reply.wav
+
+# Transcribe an existing recording or voice message
+avrvx --transcribe /tmp/voice-message.ogg
+
+# Ask what this install can do (JSON on stdout)
+avrvx --capabilities
+```
+
+Notes:
+
+- `--synthesize` writes a mono 16-bit PCM WAV at the engine's sample rate, prints the path on stdout, and creates the file mode `0600`. The output directory must already exist.
+- Prefer `--text-file` or `--text -` (stdin) over `--text "…"` for anything sensitive: arguments are visible to other users in the process list.
+- `--transcribe` prints the transcript on stdout and exits non-zero when no speech was found. Anything ffmpeg can decode works.
+- `--capabilities` prints a JSON object on stdout (diagnostics stay on stderr, so it is always safe to pipe into a parser) reporting `edition`, `licensed`, `version`, the available TTS engines, the STT model, and a `features` map. Host integrations use it to detect OSS versus Pro instead of shipping separate builds.
+
+Ready-made integration packages for Hermes Agent, OpenClaw, and Odysseus live in `integrations/` in the source tree; each has its own README.
+
 ### Scripting your assistant
 AverVOX OSS is built for terminal pipelines. Example workflows:
 
@@ -195,7 +224,7 @@ Core components
 ```
 src/avervox/
 |-- __init__.py          # package metadata
-|-- __main__.py          # CLI entry point (--listen, --speak, --version, or GUI)
+|-- __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --version, or GUI)
 |-- main.py              # GUI controller (state machine, hotkey handlers, notifications)
 |-- config.py            # configuration loading, LLM profiles, dataclasses
 |-- audio.py             # microphone capture + VAD/recorder + interrupt monitor
