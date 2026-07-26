@@ -106,9 +106,14 @@ avrvx --capabilities
 
 | Command | Behaviour |
 |---------|-----------|
-| `--synthesize` | Requires `--output PATH`. Writes mono 16-bit PCM WAV at the engine's sample rate, mode `0600`, and prints the path on stdout. The output directory must already exist. Exits 2 without `--output`, 1 with no text. |
+| `--synthesize` | Requires `--output PATH`, or `--output -` to stream raw PCM to stdout. Writes mono 16-bit PCM WAV at the engine's sample rate, mode `0600`, and prints the path on stdout. The output directory must already exist. Exits 2 without `--output`, 1 with no text, 130 when stopped by `SIGTERM`. |
 | `--transcribe AUDIO` | Prints the transcript on stdout; exits 1 when no speech was found. Any format ffmpeg can decode works. |
 | `--capabilities` | Prints a JSON object on stdout. Diagnostics go to stderr, so piping into a parser is always safe. |
+| `--daemon` | Keeps the models loaded and serves the commands above over a Unix socket. See [Warm bridge daemon](#warm-bridge-daemon). |
+
+`--voice NAME` and `--speed N` override the configured defaults for one call.
+`--capabilities` lists the installed voices under `tts.voices` so a host can
+render a picker.
 
 Text sources for `--synthesize`, in priority order: `--text-file PATH`,
 `--text "literal"`, `--text -` (stdin), or bare stdin when it is not a TTY.
@@ -124,17 +129,66 @@ visible to other users in the process list.
   "licensed": true,
   "version": "0.4.0",
   "cli": "avrvx",
-  "tts": {"engines": ["piper"], "active_engine": "piper", "synthesize_to_file": true, "formats": ["wav"]},
+  "tts": {"engines": ["piper"], "active_engine": "piper", "synthesize_to_file": true, "formats": ["wav"],
+          "voices": [{"engine": "piper", "id": "/home/you/.local/share/piper-tts/voices/en_US-lessac-high.onnx",
+                      "name": "en_US-lessac-high"}],
+          "active_voice": "/home/you/.local/share/piper-tts/voices/en_US-lessac-high.onnx", "speed": 1.0},
   "stt": {"engine": "faster-whisper", "model": "base", "transcribe_file": true, "listen_mic": true},
   "features": {"speak_playback": true, "listen_mic": true, "synthesize": true, "transcribe": true,
-               "serve": false, "wake_word": false, "session_memory": false, "kokoro": false}
+               "serve": false, "wake_word": false, "session_memory": false, "kokoro": false,
+               "daemon": true},
+  "daemon": {"socket": "/run/user/1000/avervox/bridge.sock", "running": false, "protocol": 1}
 }
 ```
 
 Host integrations read `edition` and `features` to detect OSS versus Pro rather
 than shipping separate builds. Treat these field names as a stable contract.
 Ready-made integration packages for Hermes Agent and OpenClaw, plus an
-Odysseus guide, live under `integrations/`.
+Odysseus guide, are published at
+[github.com/avrvx/AverVOX-Integrations](https://github.com/avrvx/AverVOX-Integrations).
+
+### Streaming to stdout
+
+`--output -` writes headerless mono PCM16 to stdout as it is generated and
+announces the format on stderr before the first sample, so audio starts playing
+after the first sentence rather than after the whole passage:
+
+```bash
+avrvx --synthesize --text-file reply.txt --output - | aplay -f S16_LE -r 22050 -c 1
+```
+
+Read the rate off stderr instead of assuming one: Piper's medium voices run at
+22050 Hz and its low voices at 16000 Hz.
+
+### Warm bridge daemon
+
+Every `avrvx` call pays for a Python start plus a model load before it produces
+a sample, which a program speaking every reply pays on every turn.
+`avrvx --daemon` pays it once and serves the same commands over a Unix socket
+at `$XDG_RUNTIME_DIR/avervox/bridge.sock`, created mode `0600` inside a `0700`
+directory. The protocol is newline-delimited JSON — `capabilities`,
+`synthesize`, `transcribe`, `cancel`, `ping` — with an optional framed
+streaming mode for `synthesize`, documented in full in the
+[integrations README](https://github.com/avrvx/AverVOX-Integrations#warm-bridge-optional).
+
+The daemon is purely an optimisation. Both integration packages try the socket
+first and fall back to spawning `avrvx`, so the CLI stays the authoritative
+contract and nothing breaks if you never start it.
+
+### Setting up a host application
+
+`--install-integration` writes the speech configuration for a supported host
+and then checks the result by synthesizing real audio, which catches the usual
+causes of "I pasted the config and nothing happens" — `avrvx` not on `PATH`, or
+no voice installed:
+
+```bash
+avrvx --install-integration hermes     # or: openclaw
+```
+
+An existing host configuration is never modified. If one is already present the
+snippet is written alongside it to merge by hand, and the command says so. It
+exits non-zero when synthesis fails, so a provisioning script can rely on it.
 
 ## Converse mode
 
@@ -263,12 +317,15 @@ keys from older configs still load until you save settings again.
 ```
 src/avervox/
 ├── __init__.py          # package metadata
-├── __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --version, or GUI)
+├── __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --daemon, --version, or GUI)
 ├── main.py              # GUI controller (state machine, hotkey handlers, notifications)
 ├── config.py            # configuration loading, LLM profiles, dataclasses
 ├── audio.py             # microphone capture + VAD/recorder + interrupt monitor
 ├── stt.py               # speech-to-text (faster-whisper)
 ├── tts.py               # text-to-speech engine (Piper), markdown stripping
+├── text.py              # sentence splitting shared by the LLM stream and TTS
+├── bridge_server.py     # avrvx --daemon: Unix-socket speech server for host apps
+├── integration_install.py  # avrvx --install-integration: host config + self-check
 ├── inserter.py          # text insertion + selection grabbing
 ├── hotkeys.py           # global hotkey manager (pynput)
 ├── tray.py              # system tray icon, profile submenu, copy/log/about menu items

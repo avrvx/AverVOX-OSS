@@ -39,8 +39,10 @@ def _make_gi_stubs() -> None:
     sys.modules.setdefault("gi.repository.AppIndicator3", appindicator_mod)
     repo_mod.AppIndicator3 = appindicator_mod  # type: ignore[attr-defined]
 
+    # numpy is deliberately absent: avervox.tts imports it at module scope and
+    # operates on real arrays, so a MagicMock silently turns audio into nothing.
     for name in ("pynput", "pynput.keyboard", "sounddevice", "webrtcvad",
-                 "faster_whisper", "numpy"):
+                 "faster_whisper"):
         sys.modules.setdefault(name, MagicMock())
 
 

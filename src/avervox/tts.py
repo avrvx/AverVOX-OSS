@@ -1,23 +1,32 @@
 """Text-to-Speech engine (Piper).
 
 Public API: configure(), preload(), speak(), speak_streamed(),
-synthesize_to_file(), stop()
+synthesize_to_file(), synthesize_stream(), list_voices(), clear_cache(), stop()
+
+stop() interrupts playback and raises Cancelled out of synthesize_to_file().
+
+speak(), speak_streamed(), and synthesize_to_file() accept per-request
+voice/speed overrides; anything left unset falls back to configure().
 """
 
 from __future__ import annotations
 
+import inspect
+import json
 import os
 import queue
 import re
 import threading
 import time
 import wave
+from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Generator, Iterable, Optional
 
 import numpy as np
 
 from .logger import get_logger
+from .text import split_sentences
 
 log = get_logger(__name__)
 
@@ -42,77 +51,233 @@ def _strip_markdown(text: str) -> str:
     text = re.sub(r'  +', ' ', text)
     return text.strip()
 
+class Cancelled(Exception):
+    """Raised when stop() interrupts an in-progress synthesis."""
+
+
 _stop_event = threading.Event()
-_backend: Optional[_PiperBackend] = None
 _voice_model: str = ""
+_speed: float = 1.0
+
+# Loaded voices keyed by model path, least-recently-used first, so switching
+# back to a previous voice does not reload it.
+_backends: OrderedDict[str, _PiperBackend] = OrderedDict()
+_backends_lock = threading.RLock()
+_BACKEND_CACHE_SIZE = 3
 
 
 # ── Backend ──────────────────────────────────────────────────────────────────
 
 class _PiperBackend:
 
+    #: Only used when a voice's sidecar JSON cannot be read. Piper's medium
+    #: voices are the common case; its low voices run at 16 kHz.
+    FALLBACK_SAMPLE_RATE = 22050
+
     def __init__(self, voice_model: str) -> None:
         from piper import PiperVoice
         resolved = str(Path(voice_model).expanduser())
         log.info("Loading Piper voice: %s", resolved)
         self._voice = PiperVoice.load(resolved)
+        # piper-tts grew per-call synthesis options partway through 1.x; older
+        # builds take the text alone and cannot vary speed.
+        self._tunable = "syn_config" in inspect.signature(
+            self._voice.synthesize
+        ).parameters
         log.info("Piper voice loaded (sample_rate=%d)", self._voice.config.sample_rate)
 
     @property
     def sample_rate(self) -> int:
         return self._voice.config.sample_rate
 
-    def synthesize(self, text: str) -> Generator[np.ndarray, None, None]:
-        for chunk in self._voice.synthesize(text):
+    def synthesize(
+        self, text: str, *, speed: float = 1.0
+    ) -> Generator[np.ndarray, None, None]:
+        kwargs = {}
+        if speed and speed != 1.0:
+            if self._tunable:
+                from piper import SynthesisConfig
+                kwargs["syn_config"] = SynthesisConfig(length_scale=1.0 / speed)
+            else:
+                log.debug("Installed piper-tts cannot vary speed; ignoring %.2fx", speed)
+        for chunk in self._voice.synthesize(text, **kwargs):
             yield chunk.audio_float_array.astype(np.float32)
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-def configure(voice_model: str = "") -> None:
-    """Set the TTS voice. Call before speak()."""
-    global _backend, _voice_model
+def configure(voice_model: str = "", speed: float = 1.0) -> None:
+    """Set the default TTS voice. Call before speak()."""
+    global _voice_model, _speed
     _voice_model = voice_model
-    _backend = None
+    _speed = speed
 
 
-def _load_backend() -> Optional[_PiperBackend]:
-    global _backend
-    if _backend is not None:
-        return _backend
-    try:
-        if not _voice_model:
-            log.warning("TTS voice model path not configured")
+def clear_cache() -> None:
+    """Drop every loaded model. Only needed if a voice file changed on disk."""
+    with _backends_lock:
+        _backends.clear()
+
+
+def _resolve(
+    voice: str | None = None, speed: float | None = None
+) -> tuple[str, float]:
+    """Fill per-request overrides in from the configured defaults."""
+    model = voice or _voice_model
+    return (
+        str(Path(model).expanduser()) if model else "",
+        float(_speed if speed is None else speed),
+    )
+
+
+def _load_backend(voice: str = "") -> Optional[_PiperBackend]:
+    """Return a ready backend, loading it on first use and caching it after."""
+    voice = voice or _voice_model
+    if not voice:
+        log.warning("TTS voice model path not configured")
+        return None
+    with _backends_lock:
+        cached = _backends.get(voice)
+        if cached is not None:
+            _backends.move_to_end(voice)
+            return cached
+        try:
+            backend = _PiperBackend(voice)
+        except ImportError as exc:
+            log.error("Piper TTS not installed: %s", exc)
             return None
-        _backend = _PiperBackend(_voice_model)
-    except ImportError as exc:
-        log.error("Piper TTS not installed: %s", exc)
-        return None
-    except FileNotFoundError as exc:
-        log.error("%s", exc)
-        return None
-    return _backend
+        except FileNotFoundError as exc:
+            log.error("%s", exc)
+            return None
+        _backends[voice] = backend
+        while len(_backends) > _BACKEND_CACHE_SIZE:
+            evicted, _ = _backends.popitem(last=False)
+            log.debug("Evicted cached TTS backend: %s", evicted)
+        return backend
 
 
-def preload() -> None:
-    """Eagerly load the TTS model (call from main thread at startup)."""
-    _load_backend()
+def preload(voice: str | None = None) -> None:
+    """Eagerly load a TTS model (call from main thread at startup)."""
+    resolved_voice, _ = _resolve(voice)
+    _load_backend(resolved_voice)
 
 
-def synthesize_to_file(text: str, output_path: str | Path) -> Path:
-    """Synthesize *text* to a mono PCM16 WAV file. Returns the resolved path."""
+def list_voices() -> list[dict]:
+    """Enumerate selectable voices so hosts can render a picker.
+
+    Scans the ``.onnx`` files next to the configured model and in the standard
+    piper-tts directory.
+    """
+    voices: list[dict] = []
+    seen: set[str] = set()
+
+    search_dirs = [Path.home() / ".local" / "share" / "piper-tts" / "voices"]
+    if _voice_model:
+        search_dirs.insert(0, Path(_voice_model).expanduser().parent)
+    for directory in search_dirs:
+        try:
+            candidates = sorted(directory.glob("*.onnx"))
+        except OSError:
+            continue
+        for model in candidates:
+            key = str(model)
+            if key in seen:
+                continue
+            seen.add(key)
+            voices.append({"engine": "piper", "id": key, "name": model.stem})
+
+    return voices
+
+
+def sample_rate(voice: str | None = None) -> int:
+    """The rate synthesis will produce, without loading a model to find out.
+
+    A host that opens an audio device before the first chunk arrives needs
+    this up front. Piper records it in the ``.onnx.json`` beside the model and
+    it varies by voice quality.
+    """
+    resolved_voice, _ = _resolve(voice, None)
+
+    backend = _backends.get(resolved_voice)
+    if backend is not None:
+        return int(backend.sample_rate)
+    try:
+        with open(f"{resolved_voice}.json", encoding="utf-8") as handle:
+            return int(json.load(handle)["audio"]["sample_rate"])
+    except (OSError, ValueError, KeyError) as exc:
+        log.debug("Could not read the sample rate for %s: %s", resolved_voice, exc)
+        return _PiperBackend.FALLBACK_SAMPLE_RATE
+
+
+def synthesize_stream(
+    text: str,
+    *,
+    voice: str | None = None,
+    speed: float | None = None,
+) -> Generator[tuple[np.ndarray, int], None, None]:
+    """Yield ``(pcm_int16, sample_rate)`` chunks as they are produced.
+
+    Piper yields incrementally, so a long passage starts arriving almost at
+    once. The text is split into sentences first so a caller playing the
+    stream gets natural boundaries.
+    """
     text = _strip_markdown(text)
     if not text:
         raise ValueError("No text to synthesize")
 
-    backend = _load_backend()
+    resolved_voice, resolved_speed = _resolve(voice, speed)
+    backend = _load_backend(resolved_voice)
     if backend is None:
         raise RuntimeError("TTS not available — no engine configured")
 
+    _stop_event.clear()
+    rate = int(backend.sample_rate)
+    produced = False
+    for sentence in split_sentences(text):
+        for samples in backend.synthesize(sentence, speed=resolved_speed):
+            if _stop_event.is_set():
+                raise Cancelled("Synthesis cancelled")
+            if samples is None or len(samples) == 0:
+                continue
+            audio = np.asarray(samples, dtype=np.float32).reshape(-1)
+            produced = True
+            yield (np.clip(audio, -1.0, 1.0) * 32767.0).astype(np.int16), rate
+    if _stop_event.is_set():
+        raise Cancelled("Synthesis cancelled")
+    if not produced:
+        raise RuntimeError("TTS produced no audio")
+
+
+def synthesize_to_file(
+    text: str,
+    output_path: str | Path,
+    *,
+    voice: str | None = None,
+    speed: float | None = None,
+) -> Path:
+    """Synthesize *text* to a mono PCM16 WAV file. Returns the resolved path.
+
+    Unset arguments fall back to whatever :func:`configure` last set.
+    """
+    text = _strip_markdown(text)
+    if not text:
+        raise ValueError("No text to synthesize")
+
+    resolved_voice, resolved_speed = _resolve(voice, speed)
+    backend = _load_backend(resolved_voice)
+    if backend is None:
+        raise RuntimeError("TTS not available — no engine configured")
+
+    _stop_event.clear()
     chunks: list[np.ndarray] = []
-    for samples in backend.synthesize(text):
+    for samples in backend.synthesize(text, speed=resolved_speed):
+        # Long passages take seconds; without this the only way out is SIGKILL.
+        if _stop_event.is_set():
+            raise Cancelled("Synthesis cancelled")
         if samples is not None and len(samples) > 0:
             chunks.append(np.asarray(samples, dtype=np.float32).reshape(-1))
+    if _stop_event.is_set():
+        raise Cancelled("Synthesis cancelled")
     if not chunks:
         raise RuntimeError("TTS produced no audio")
 
@@ -136,13 +301,16 @@ def synthesize_to_file(text: str, output_path: str | Path) -> Path:
     return path
 
 
-def speak(text: str) -> None:
+def speak(
+    text: str, *, voice: str | None = None, speed: float | None = None
+) -> None:
     """Synthesize and stream-play text. Blocks until done or stop() is called."""
     text = _strip_markdown(text)
     if not text:
         return
 
-    backend = _load_backend()
+    resolved_voice, resolved_speed = _resolve(voice, speed)
+    backend = _load_backend(resolved_voice)
     if backend is None:
         log.warning("TTS not available — no engine configured")
         return
@@ -193,7 +361,7 @@ def speak(text: str) -> None:
             dtype="float32",
             callback=_callback,
         ) as stream:
-            for samples in backend.synthesize(text):
+            for samples in backend.synthesize(text, speed=resolved_speed):
                 if _stop_event.is_set():
                     return
                 while not _stop_event.is_set():
@@ -226,6 +394,8 @@ def speak_streamed(
     *,
     on_near_complete: Callable[[], None] | None = None,
     near_complete_seconds: float = 0.3,
+    voice: str | None = None,
+    speed: float | None = None,
 ) -> None:
     """Synthesize and play an iterable of sentences as continuous audio.
 
@@ -240,7 +410,8 @@ def speak_streamed(
     If the *sentences* iterator raises, playback finishes with whatever audio
     is already queued and the exception is re-raised to the caller.
     """
-    backend = _load_backend()
+    resolved_voice, resolved_speed = _resolve(voice, speed)
+    backend = _load_backend(resolved_voice)
     if backend is None:
         log.warning("TTS not available — no engine configured")
         return
@@ -338,7 +509,7 @@ def speak_streamed(
                 sentence = _strip_markdown(sentence)
                 if not sentence:
                     continue
-                for samples in backend.synthesize(sentence):
+                for samples in backend.synthesize(sentence, speed=resolved_speed):
                     if _stop_event.is_set():
                         return
                     if not _put(samples):
@@ -373,6 +544,11 @@ def speak_streamed(
 
     if synth_error:
         raise synth_error[0]
+
+
+def is_stopped() -> bool:
+    """True if stop() was called and nothing has started speaking since."""
+    return _stop_event.is_set()
 
 
 def stop() -> None:

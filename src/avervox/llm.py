@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import time
 import uuid
 from typing import Generator, TYPE_CHECKING
@@ -23,7 +22,8 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-_SENTENCE_END = re.compile(r'[.!?:;]\s')
+from .text import SENTENCE_END
+
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful voice assistant. The user's messages are transcribed from "
@@ -165,7 +165,7 @@ class LLMBackend:
                     buffer += token
 
                     while True:
-                        m = _SENTENCE_END.search(buffer)
+                        m = SENTENCE_END.search(buffer)
                         if not m:
                             break
                         split_at = m.end()

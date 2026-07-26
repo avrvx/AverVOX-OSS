@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Bridge CLI: `--voice` and `--speed` override the configured defaults for a single call, and `--capabilities` gained a `tts.voices` list so host applications can render a voice picker.
+- TTS backends are now cached per voice, so switching voices no longer reloads a model that was already in memory.
+- `SIGTERM` during synthesis stops cleanly and exits `130`, letting callers distinguish a cancellation from a failure.
+- New `avrvx --daemon`: keeps the models loaded and serves `capabilities`, `synthesize`, `transcribe`, `cancel`, and `ping` over a `0600` Unix socket at `$XDG_RUNTIME_DIR/avervox/bridge.sock`. Roughly 2.5x faster per call on the reference machine. Reported in `--capabilities` as `features.daemon`.
+- Streaming synthesis: `--synthesize --output -` writes raw PCM to stdout as it is generated, and the daemon's `synthesize` accepts `"stream": true` to send framed audio. First audio arrives after the first sentence rather than after the whole reply.
+- New `text.py` holds the sentence splitter the LLM stream and the speech pipeline both use, which previously existed as two separate definitions.
+- New `avrvx --install-integration hermes|openclaw` writes a host's speech configuration and then verifies it by synthesizing real audio. An existing host configuration is never modified; the snippet is written alongside it instead.
+- Fixed: every `avrvx` command ran twice when AverVOX was installed from PyPI. The console script entry point calls `main()`, and `__main__.py` also called it on import, so `--capabilities` printed two JSON objects (which no host could parse) and `--synthesize` synthesized twice. Installs launched through the tray script were unaffected.
+
 ## 0.4.0 - 2026-07-25
 
 - Bridge CLI: `avrvx --synthesize` writes speech to a WAV file (`--text`, `--text-file`, or stdin via `--text -`), `avrvx --transcribe FILE` prints a transcript, and `avrvx --capabilities` emits a JSON capability probe (edition, engines, features) for host integrations.
