@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "avrvx"
-version = "0.5.4"
+version = "0.5.5"
 description = "Give your LLMs a voice. Dictate, speak, and converse with any OpenAI-compatible LLM from a global hotkey on Linux."
 readme = "README.md"
 license = "MIT"
@@ -41,6 +41,7 @@ Issues     = "https://github.com/avrvx/AverVOX-OSS/issues"
 
 [project.scripts]
 avrvx = "avervox.__main__:main"
+avervox = "avervox.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

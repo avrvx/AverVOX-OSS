@@ -1,8 +1,16 @@
 # AverVOX OSS - Give your LLMs a voice.
 Website Edition
-version: 0.5.4
+version: 0.5.5
 
 Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus can receive your speech as text. Select text to have it read aloud. Hold free-form voice conversations with Large Language Models (LLMs) on Linux.
+
+> **Naming note:** the product is **AverVOX**; the Python package and command are **`avrvx`**.
+>
+> ```bash
+> pip install avrvx
+> ```
+>
+> Starting with 0.5.5, `avervox` also works everywhere: the `avervox` command is installed as an alias of `avrvx`, and `pip install avervox` is an alias package that installs `avrvx` for you.
 
 ## Key Features
 
@@ -59,7 +67,7 @@ This will:
 - Write an `avrvx` launcher to `~/.local/bin/`
 - Add desktop menu and autostart entries
 
-Alternatively, `pip install avervox` installs the package; you still need the system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for the full list.
+Alternatively, `pip install avrvx` installs the package (the PyPI package is named `avrvx`; `pip install avervox` also resolves to it via the alias package); you still need the system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for the full list.
 
 **New to AverVOX OSS?** See [QUICK_START-OSS.md](QUICK_START-OSS.md) for a guided tour of the tray app and every Settings tab.
 

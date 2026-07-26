@@ -1,12 +1,14 @@
 # AverVOX OSS - Documentation
 Technical reference for AverVOX OSS (free).
 Website Edition
-version: 0.5.4
+version: 0.5.5
 
 For a quick overview and install, see
 [README.md](README.md).
 
 **New users:** [QUICK_START-OSS.md](QUICK_START-OSS.md) walks through the tray app and every Settings tab.
+
+> **Naming note:** the product is **AverVOX**; the Python package and command are **`avrvx`** (`pip install avrvx`). Starting with 0.5.5, the `avervox` command is installed as an alias, and `pip install avervox` resolves to `avrvx` via an alias package.
 
 ## Edition matrix
 
@@ -62,9 +64,10 @@ on GitHub or PyPI. See [avervoxpro.com](https://avervoxpro.com/).
 The installer creates a Python venv at `~/.local/share/avervox/venv`, downloads
 the Piper voice model, and writes an `avrvx` launcher to `~/.local/bin/`.
 
-Alternatively, `pip install avervox` installs the package; you still need
-system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for the
-full list.
+Alternatively, `pip install avrvx` installs the package (the PyPI package is
+named `avrvx`; `pip install avervox` also resolves to it via the alias
+package); you still need system dependencies (GTK, xdotool, xclip, portaudio) -
+see `install.sh` for the full list.
 
 ## GUI usage
 
@@ -127,7 +130,7 @@ visible to other users in the process list.
   "product": "avervox-oss",
   "edition": "oss",
   "licensed": true,
-  "version": "0.5.4",
+  "version": "0.5.5",
   "cli": "avrvx",
   "tts": {"engines": ["piper"], "active_engine": "piper", "synthesize_to_file": true, "formats": ["wav"],
           "voices": [{"engine": "piper", "id": "/home/you/.local/share/piper-tts/voices/en_US-lessac-high.onnx",

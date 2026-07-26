@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5 - 2026-07-26
+
+- Adds `avervox` as a command alias for `avrvx`; both launch the same app. A companion `avervox` alias package on PyPI makes `pip install avervox` work as well.
+- Corrects the pip install command in README/DOCS (`pip install avrvx`, not `avervox`) and adds a naming note mapping the AverVOX product name to the `avrvx` package.
+
 ## 0.5.4 - 2026-07-26
 
 - Documentation only; the code is unchanged from 0.5.3. Aligns Quick Start / DOCS with the Settings UI (including End-of-turn pause), fixes the Pro purchase link, and corrects startup notification wording.
