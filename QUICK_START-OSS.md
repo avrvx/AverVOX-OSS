@@ -1,6 +1,6 @@
 # AverVOX OSS - Quick Start User Guide
 Website Edition
-version: 0.5.3
+version: 0.5.4
 
 AverVOX OSS is a desktop app which runs in the Task Bar. Unless specified otherwise for particular operations described elsewhere in the documentation, we recommend starting the program by clicking the desktop launcher added by the installer to the desktop menu.
 
@@ -80,7 +80,8 @@ OSS uses Piper only (no Kokoro engine or speed control in Settings).
 
 | Setting | Description |
 |---------|-------------|
-| **Silence timeout (sec)** | Silence before the conversation ends. |
+| **End-of-turn pause (ms)** | Silence length that ends your speaking turn and sends audio to the LLM. |
+| **Silence timeout (sec)** | Silence before the conversation ends (default 7 s). |
 | **Re-arm delay (ms)** | Delay after TTS before the mic reopens. |
 | **Goodbye phrases** | Comma-separated phrases that end the session. |
 | **Voice interrupt (barge-in)** | Speak during assistant playback to interrupt. **Requires headphones** - OSS shows a warning and confirmation checkbox because microphone feedback can cause false interrupts without them. |

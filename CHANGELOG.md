@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4 - 2026-07-26
+
+- Documentation only; the code is unchanged from 0.5.3. Aligns Quick Start / DOCS with the Settings UI (including End-of-turn pause), fixes the Pro purchase link, and corrects startup notification wording.
+
 ## 0.5.3 - 2026-07-26
 
 - No functional change. The version moves in step with AverVOX Pro 0.5.3, which repairs an AppImage entry point that the OSS edition does not ship.

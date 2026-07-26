@@ -1,7 +1,7 @@
 # AverVOX OSS - Documentation
 Technical reference for AverVOX OSS (free).
 Website Edition
-version: 0.5.3
+version: 0.5.4
 
 For a quick overview and install, see
 [README.md](README.md).
@@ -32,7 +32,7 @@ For a quick overview and install, see
 
 Pro-only features (Kokoro TTS, wake word, session memory, LAN, and more) are
 listed in the edition matrix above. AverVOX Pro is distributed separately - not
-on GitHub or PyPI. See `[Pro purchase page]`. URL placeholders: [LINKS.md](LINKS.md).
+on GitHub or PyPI. See [avervoxpro.com](https://avervoxpro.com/).
 
 ## Architecture
 
@@ -73,7 +73,7 @@ avrvx
 ```
 
 Starts the system tray icon with hotkeys active. A desktop notification
-confirms "AverVOX OSS - Ready - hotkeys active". No window - just the tray.
+confirms "AverVOX OSS" / "Ready — hotkeys active". No window - just the tray.
 
 Right-click the tray icon for:
 
@@ -127,7 +127,7 @@ visible to other users in the process list.
   "product": "avervox-oss",
   "edition": "oss",
   "licensed": true,
-  "version": "0.5.3",
+  "version": "0.5.4",
   "cli": "avrvx",
   "tts": {"engines": ["piper"], "active_engine": "piper", "synthesize_to_file": true, "formats": ["wav"],
           "voices": [{"engine": "piper", "id": "/home/you/.local/share/piper-tts/voices/en_US-lessac-high.onnx",
