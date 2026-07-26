@@ -1,6 +1,6 @@
 # AverVOX OSS - Quick Start User Guide
 Website Edition
-version: 0.5.5
+version: 0.5.6
 
 AverVOX OSS is a desktop app which runs in the Task Bar. Unless specified otherwise for particular operations described elsewhere in the documentation, we recommend starting the program by clicking the desktop launcher added by the installer to the desktop menu.
 
@@ -142,4 +142,5 @@ Ready-made integration packages for Hermes Agent and OpenClaw, plus an Odysseus 
 
 - Configure an **LLM** profile and test the connection.
 - Try the three hotkeys: Dictate, Speak selection, and Converse.
+- If something misbehaves, run `avrvx --doctor` — it checks your distro, display, audio, models, and LLM endpoint in one pass and prints a fix hint next to anything that failed.
 - See [DOCS.md](DOCS.md) for configuration file details and [README.md](README.md) for install and troubleshooting.

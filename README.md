@@ -1,6 +1,6 @@
 # AverVOX OSS - Give your LLMs a voice.
 Website Edition
-version: 0.5.5
+version: 0.5.6
 
 Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus can receive your speech as text. Select text to have it read aloud. Hold free-form voice conversations with Large Language Models (LLMs) on Linux.
 
@@ -151,6 +151,9 @@ avrvx --transcribe /tmp/voice-message.ogg
 
 # Ask what this install can do (JSON on stdout)
 avrvx --capabilities
+
+# Check the whole installation: distro, display, audio, models, LLM endpoint
+avrvx --doctor
 ```
 
 Notes:
@@ -161,6 +164,7 @@ Notes:
 - `--transcribe` prints the transcript on stdout and exits non-zero when no speech was found. Anything ffmpeg can decode works.
 - `--capabilities` prints a JSON object on stdout (diagnostics stay on stderr, so it is always safe to pipe into a parser) reporting `edition`, `licensed`, `version`, the available TTS engines and voices, the STT model, and a `features` map. Host integrations use it to detect OSS versus Pro instead of shipping separate builds.
 - Sending `SIGTERM` stops synthesis cleanly and exits `130`, which lets a caller tell a cancelled request from a failed one.
+- `--doctor` runs the preflight checks — distro, display server, system packages, Python dependencies, microphone and playback, STT/TTS models, text insertion, your configured LLM endpoint, the warm daemon, and host integrations — each with a PASS/WARN/FAIL line and a fix hint. It never plays audio, types into windows, or modifies files, and it exits non-zero when something failed, so it works in provisioning scripts too. Run it first when anything misbehaves.
 
 #### Streaming to stdout
 
@@ -269,7 +273,7 @@ Core components
 ```
 src/avervox/
 |-- __init__.py          # package metadata
-|-- __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --daemon, --install-integration, --version, or GUI)
+|-- __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --doctor, --daemon, --install-integration, --version, or GUI)
 |-- main.py              # GUI controller (state machine, hotkey handlers, notifications)
 |-- config.py            # configuration loading, LLM profiles, dataclasses
 |-- audio.py             # microphone capture + VAD/recorder + interrupt monitor
@@ -277,6 +281,7 @@ src/avervox/
 |-- tts.py               # text-to-speech engine (Piper), markdown stripping
 |-- text.py              # sentence splitting shared by the LLM stream and TTS
 |-- bridge_server.py     # avrvx --daemon: Unix-socket speech server for host apps
+|-- doctor.py            # avrvx --doctor: preflight checks (distro, audio, models, endpoint)
 |-- integration_install.py  # avrvx --install-integration: host config + self-check
 |-- inserter.py          # text insertion + selection grabbing
 |-- hotkeys.py           # global hotkey manager (pynput)

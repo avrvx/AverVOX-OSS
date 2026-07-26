@@ -1,7 +1,7 @@
 # AverVOX OSS - Documentation
 Technical reference for AverVOX OSS (free).
 Website Edition
-version: 0.5.5
+version: 0.5.6
 
 For a quick overview and install, see
 [README.md](README.md).
@@ -105,6 +105,9 @@ avrvx --transcribe /tmp/voice-message.ogg
 
 # Ask what this install can do (JSON on stdout)
 avrvx --capabilities
+
+# Check the whole installation: distro, display, audio, models, LLM endpoint
+avrvx --doctor
 ```
 
 | Command | Behaviour |
@@ -113,6 +116,7 @@ avrvx --capabilities
 | `--transcribe AUDIO` | Prints the transcript on stdout; exits 1 when no speech was found. Any format ffmpeg can decode works. |
 | `--capabilities` | Prints a JSON object on stdout. Diagnostics go to stderr, so piping into a parser is always safe. |
 | `--daemon` | Keeps the models loaded and serves the commands above over a Unix socket. See [Warm bridge daemon](#warm-bridge-daemon). |
+| `--doctor` | Runs preflight checks (distro, display, system packages, Python deps, microphone, playback, models, text insertion, LLM endpoint, daemon, integrations) with a PASS/WARN/FAIL line each. Non-intrusive: never plays audio, types, or writes files. Exits 0 when nothing failed, 1 otherwise. |
 
 `--voice NAME` and `--speed N` override the configured defaults for one call.
 `--capabilities` lists the installed voices under `tts.voices` so a host can
@@ -130,7 +134,7 @@ visible to other users in the process list.
   "product": "avervox-oss",
   "edition": "oss",
   "licensed": true,
-  "version": "0.5.5",
+  "version": "0.5.6",
   "cli": "avrvx",
   "tts": {"engines": ["piper"], "active_engine": "piper", "synthesize_to_file": true, "formats": ["wav"],
           "voices": [{"engine": "piper", "id": "/home/you/.local/share/piper-tts/voices/en_US-lessac-high.onnx",
@@ -320,7 +324,7 @@ keys from older configs still load until you save settings again.
 ```
 src/avervox/
 ├── __init__.py          # package metadata
-├── __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --daemon, --version, or GUI)
+├── __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --doctor, --daemon, --version, or GUI)
 ├── main.py              # GUI controller (state machine, hotkey handlers, notifications)
 ├── config.py            # configuration loading, LLM profiles, dataclasses
 ├── audio.py             # microphone capture + VAD/recorder + interrupt monitor
@@ -328,6 +332,7 @@ src/avervox/
 ├── tts.py               # text-to-speech engine (Piper), markdown stripping
 ├── text.py              # sentence splitting shared by the LLM stream and TTS
 ├── bridge_server.py     # avrvx --daemon: Unix-socket speech server for host apps
+├── doctor.py            # avrvx --doctor: preflight checks (distro, audio, models, endpoint)
 ├── integration_install.py  # avrvx --install-integration: host config + self-check
 ├── inserter.py          # text insertion + selection grabbing
 ├── hotkeys.py           # global hotkey manager (pynput)
@@ -405,6 +410,9 @@ all `disabled_models` entries are cleared automatically.
 
 ## Troubleshooting
 
+- **Start with `avrvx --doctor`**: it checks the distro, display server, system
+  packages, microphone, playback, models, text insertion, and your LLM endpoint
+  in one pass and prints a fix hint next to anything that failed.
 - **Logs**: `~/.local/share/avervox/avervox.log`
 - **No audio**: Run `avrvx --listen` to test capture in isolation
 - **Hotkey not working**: Check `journalctl --user -f` for pynput/X11 errors

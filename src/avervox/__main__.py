@@ -8,6 +8,7 @@ Usage:
   avrvx --synthesize --output PATH [--text … | --text-file … | stdin]
   avrvx --transcribe PATH
   avrvx --capabilities  Print JSON capability probe for host integrations
+  avrvx --doctor        Run preflight checks; exit 0 when nothing failed
   avrvx --install-integration HOST   Configure a host and verify it works
 """
 
@@ -319,6 +320,14 @@ def main():
         help="Print JSON capability probe for host integrations",
     )
     parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help=(
+            "Run preflight checks: distro, display, audio, models, "
+            "LLM endpoint, integrations"
+        ),
+    )
+    parser.add_argument(
         "--install-integration",
         metavar="HOST",
         default=None,
@@ -371,7 +380,11 @@ def main():
         sys.stderr.write("--speed must be between 0.1 and 4.0\n")
         sys.exit(2)
 
-    if args.capabilities:
+    if args.doctor:
+        from .doctor import run as doctor_run
+
+        sys.exit(doctor_run())
+    elif args.capabilities:
         _cli_capabilities()
     elif args.install_integration is not None:
         from .integration_install import install

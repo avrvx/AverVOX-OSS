@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.6 - 2026-07-26
+
+- Adds `avrvx --doctor`: preflight checks for the distro, display server, system packages, Python dependencies, microphone and playback, STT/TTS models, text insertion, the configured LLM endpoint, the warm daemon, and host integrations — each with a PASS/WARN/FAIL line and a fix hint. Non-intrusive (never plays audio, types, or writes files) and exits non-zero on failure, so it works in provisioning scripts.
+
 ## 0.5.5 - 2026-07-26
 
 - Adds `avervox` as a command alias for `avrvx`; both launch the same app. A companion `avervox` alias package on PyPI makes `pip install avervox` work as well.
