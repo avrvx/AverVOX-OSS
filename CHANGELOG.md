@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-07-25
 
 - Bridge CLI: `--voice` and `--speed` override the configured defaults for a single call, and `--capabilities` gained a `tts.voices` list so host applications can render a voice picker.
 - TTS backends are now cached per voice, so switching voices no longer reloads a model that was already in memory.
