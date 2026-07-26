@@ -1,6 +1,6 @@
 # AverVOX OSS - Quick Start User Guide
 Website Edition
-version: 0.5.2
+version: 0.5.3
 
 AverVOX OSS is a desktop app which runs in the Task Bar. Unless specified otherwise for particular operations described elsewhere in the documentation, we recommend starting the program by clicking the desktop launcher added by the installer to the desktop menu.
 
