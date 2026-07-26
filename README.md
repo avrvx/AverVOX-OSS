@@ -1,6 +1,6 @@
 # AverVOX OSS - Give your LLMs a voice.
 Website Edition
-version: 0.5.1
+version: 0.5.2
 
 Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus can receive your speech as text. Select text to have it read aloud. Hold free-form voice conversations with Large Language Models (LLMs) on Linux.
 
@@ -185,7 +185,7 @@ avrvx --install-integration hermes     # or: openclaw
 
 An existing host configuration is never modified. If one is already present, the snippet is written alongside it for you to merge, and the command says so. It exits non-zero when synthesis fails, so it is safe to use in a provisioning script.
 
-Ready-made integration packages for Hermes Agent, OpenClaw, and Odysseus are published at [github.com/avrvx/AverVOX-Integrations](https://github.com/avrvx/AverVOX-Integrations); each has its own README, and the [repository README](https://github.com/avrvx/AverVOX-Integrations#warm-bridge-optional) documents the daemon protocol in full.
+Ready-made integration packages for Hermes Agent and OpenClaw, plus an Odysseus guide, are published at [github.com/avrvx/AverVOX-Integrations](https://github.com/avrvx/AverVOX-Integrations); each has its own README, and the [repository README](https://github.com/avrvx/AverVOX-Integrations#warm-bridge-optional) documents the daemon protocol in full.
 
 ### Scripting your assistant
 AverVOX OSS is built for terminal pipelines. Example workflows:

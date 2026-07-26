@@ -1,6 +1,6 @@
 # AverVOX OSS - Quick Start User Guide
 Website Edition
-version: 0.5.1
+version: 0.5.2
 
 AverVOX OSS is a desktop app which runs in the Task Bar. Unless specified otherwise for particular operations described elsewhere in the documentation, we recommend starting the program by clicking the desktop launcher added by the installer to the desktop menu.
 
@@ -133,7 +133,7 @@ avrvx --install-integration hermes     # or: openclaw
 
 An existing host configuration is never modified. If one is already present, the snippet is written alongside it for you to merge, and the command says so. It exits non-zero when synthesis fails, so it is safe to use in a provisioning script.
 
-Ready-made integration packages for Hermes Agent, OpenClaw, and Odysseus are published at [github.com/avrvx/AverVOX-Integrations](https://github.com/avrvx/AverVOX-Integrations).
+Ready-made integration packages for Hermes Agent and OpenClaw, plus an Odysseus guide, are published at [github.com/avrvx/AverVOX-Integrations](https://github.com/avrvx/AverVOX-Integrations).
 
 ---
 

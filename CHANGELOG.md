@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2 - 2026-07-26
+
+- Documentation only; the code is unchanged from 0.5.1. The README and quick start described Odysseus as a ready-made integration package alongside Hermes Agent and OpenClaw. Odysseus has no package — it ships its own local TTS and its plugin ABI is still settling, so the supported path is pointing AverVOX Converse at its OpenAI-compatible endpoint. `DOCS.md` already worded this correctly and the rest now matches it.
+
 ## 0.5.1 - 2026-07-26
 
 - `avrvx --install-integration openclaw` suggested `clawhub package install`, which is not a ClawHub subcommand. OpenClaw plugins install through OpenClaw itself with `openclaw plugins install @avervox/openclaw-plugin`, which tries ClawHub and falls back to npm, where the plugin is published.
