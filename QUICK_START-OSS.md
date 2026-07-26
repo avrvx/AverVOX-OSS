@@ -112,9 +112,28 @@ avrvx --transcribe /tmp/voice-message.ogg
 avrvx --capabilities
 ```
 
-`--synthesize` writes a WAV file rather than playing it, `--transcribe` turns a recording into text on stdout, and `--capabilities` prints a small JSON description of this install so a host program knows what it is talking to. For sensitive text prefer `--text-file FILE` or `--text -` (read from stdin), because command-line arguments are visible to other users on the machine.
+`--synthesize` writes a WAV file rather than playing it, `--transcribe` turns a recording into text on stdout, and `--capabilities` prints a small JSON description of this install so a host program knows what it is talking to. Add `--voice` or `--speed` to override your settings for a single call. For sensitive text prefer `--text-file FILE` or `--text -` (read from stdin), because command-line arguments are visible to other users on the machine.
 
-Ready-made integration packages for Hermes Agent, OpenClaw, and Odysseus live in the `integrations/` directory of the source tree.
+Two options make this fast enough to speak every reply of a conversation:
+
+```bash
+avrvx --daemon &                                   # keep the model loaded between calls
+avrvx --synthesize --text-file reply.txt -o -      # stream PCM as it is generated
+```
+
+`--daemon` serves the same commands over a private Unix socket, so callers stop paying for a Python start and a model load every time. `--output -` starts producing audio after the first sentence instead of after the whole passage. Both are optional and nothing breaks without them.
+
+### Setting up a host application
+
+`--install-integration` writes the speech configuration for a supported host and then checks the result by synthesizing real audio, which catches the usual causes of "I pasted the config and nothing happens" — `avrvx` not on `PATH`, or no voice installed:
+
+```bash
+avrvx --install-integration hermes     # or: openclaw
+```
+
+An existing host configuration is never modified. If one is already present, the snippet is written alongside it for you to merge, and the command says so. It exits non-zero when synthesis fails, so it is safe to use in a provisioning script.
+
+Ready-made integration packages for Hermes Agent, OpenClaw, and Odysseus are published at [github.com/avrvx/AverVOX-Integrations](https://github.com/avrvx/AverVOX-Integrations).
 
 ---
 

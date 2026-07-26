@@ -24,6 +24,7 @@ Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus
 | Converse (`Ctrl+Alt+C`) | Yes | Yes |
 | CLI (`avrvx --listen`, `--speak`) | Yes | Yes |
 | Bridge CLI (`--synthesize`, `--transcribe`, `--capabilities`) | Yes | Yes |
+| Warm bridge daemon (`--daemon`) | Yes | Yes |
 | Piper TTS | Yes | Yes |
 | faster-whisper STT | Yes | Yes |
 | Voice interrupt | Yes | Yes |
@@ -134,6 +135,9 @@ avrvx --synthesize --text "Deployment complete" --output /tmp/reply.wav
 avrvx --synthesize --text-file /tmp/reply.txt --output /tmp/reply.wav
 echo "Deployment complete" | avrvx --synthesize --text - --output /tmp/reply.wav
 
+# Pick a voice and a rate for one call, without changing your settings
+avrvx --synthesize --text "Slow down" --voice en_GB-alba-medium --speed 0.9 --output /tmp/reply.wav
+
 # Transcribe an existing recording or voice message
 avrvx --transcribe /tmp/voice-message.ogg
 
@@ -145,10 +149,43 @@ Notes:
 
 - `--synthesize` writes a mono 16-bit PCM WAV at the engine's sample rate, prints the path on stdout, and creates the file mode `0600`. The output directory must already exist.
 - Prefer `--text-file` or `--text -` (stdin) over `--text "…"` for anything sensitive: arguments are visible to other users in the process list.
+- `--voice` and `--speed` override your configured defaults for a single call. `--capabilities` lists the installed voices under `tts.voices`, so a host application can offer a picker.
 - `--transcribe` prints the transcript on stdout and exits non-zero when no speech was found. Anything ffmpeg can decode works.
-- `--capabilities` prints a JSON object on stdout (diagnostics stay on stderr, so it is always safe to pipe into a parser) reporting `edition`, `licensed`, `version`, the available TTS engines, the STT model, and a `features` map. Host integrations use it to detect OSS versus Pro instead of shipping separate builds.
+- `--capabilities` prints a JSON object on stdout (diagnostics stay on stderr, so it is always safe to pipe into a parser) reporting `edition`, `licensed`, `version`, the available TTS engines and voices, the STT model, and a `features` map. Host integrations use it to detect OSS versus Pro instead of shipping separate builds.
+- Sending `SIGTERM` stops synthesis cleanly and exits `130`, which lets a caller tell a cancelled request from a failed one.
 
-Ready-made integration packages for Hermes Agent, OpenClaw, and Odysseus live in `integrations/` in the source tree; each has its own README.
+#### Streaming to stdout
+
+`--output -` writes headerless mono PCM16 to stdout as it is generated, and announces the format on stderr before the first sample. Audio starts playing after the first sentence instead of after the whole passage:
+
+```bash
+avrvx --synthesize --text-file reply.txt --output - | aplay -f S16_LE -r 22050 -c 1
+```
+
+Use the sample rate printed on stderr rather than assuming one: Piper's medium voices run at 22050 Hz and its low voices at 16000 Hz.
+
+#### Warm bridge daemon
+
+Every `avrvx` call pays for a Python start plus a model load before it produces a sample, which a program speaking every reply pays on every turn. `avrvx --daemon` pays it once and then serves requests over a Unix socket at `$XDG_RUNTIME_DIR/avervox/bridge.sock`, created mode `0600` inside a `0700` directory so nothing else on the machine can reach it.
+
+```bash
+avrvx --daemon &
+avrvx --capabilities   # features.daemon reports the socket path and whether it is up
+```
+
+The protocol is newline-delimited JSON — `capabilities`, `synthesize`, `transcribe`, `cancel`, and `ping` — with an optional framed streaming mode for `synthesize`. The daemon is purely an optimisation: the integration packages try the socket first and fall back to spawning `avrvx`, so nothing breaks if you never start it. A `systemd --user` unit is included in the integrations repository.
+
+#### Setting up a host application
+
+`--install-integration` writes the speech configuration for a supported host and then checks the result by synthesizing real audio, which catches the usual causes of "I pasted the config and nothing happens" — `avrvx` not on `PATH`, or no voice installed:
+
+```bash
+avrvx --install-integration hermes     # or: openclaw
+```
+
+An existing host configuration is never modified. If one is already present, the snippet is written alongside it for you to merge, and the command says so. It exits non-zero when synthesis fails, so it is safe to use in a provisioning script.
+
+Ready-made integration packages for Hermes Agent, OpenClaw, and Odysseus are published at [github.com/avrvx/AverVOX-Integrations](https://github.com/avrvx/AverVOX-Integrations); each has its own README, and the [repository README](https://github.com/avrvx/AverVOX-Integrations#warm-bridge-optional) documents the daemon protocol in full.
 
 ### Scripting your assistant
 AverVOX OSS is built for terminal pipelines. Example workflows:
@@ -224,12 +261,15 @@ Core components
 ```
 src/avervox/
 |-- __init__.py          # package metadata
-|-- __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --version, or GUI)
+|-- __main__.py          # CLI entry point (--listen, --speak, --synthesize, --transcribe, --capabilities, --daemon, --install-integration, --version, or GUI)
 |-- main.py              # GUI controller (state machine, hotkey handlers, notifications)
 |-- config.py            # configuration loading, LLM profiles, dataclasses
 |-- audio.py             # microphone capture + VAD/recorder + interrupt monitor
 |-- stt.py               # speech-to-text (faster-whisper)
 |-- tts.py               # text-to-speech engine (Piper), markdown stripping
+|-- text.py              # sentence splitting shared by the LLM stream and TTS
+|-- bridge_server.py     # avrvx --daemon: Unix-socket speech server for host apps
+|-- integration_install.py  # avrvx --install-integration: host config + self-check
 |-- inserter.py          # text insertion + selection grabbing
 |-- hotkeys.py           # global hotkey manager (pynput)
 |-- tray.py              # system tray icon, profile submenu, copy/log/about menu items
