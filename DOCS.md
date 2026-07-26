@@ -1,7 +1,7 @@
 # AverVOX OSS - Documentation
 Technical reference for AverVOX OSS (free).
 Website Edition
-version: 0.5.0
+version: 0.5.1
 
 For a quick overview and install, see
 [README.md](README.md).
@@ -127,7 +127,7 @@ visible to other users in the process list.
   "product": "avervox-oss",
   "edition": "oss",
   "licensed": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "cli": "avrvx",
   "tts": {"engines": ["piper"], "active_engine": "piper", "synthesize_to_file": true, "formats": ["wav"],
           "voices": [{"engine": "piper", "id": "/home/you/.local/share/piper-tts/voices/en_US-lessac-high.onnx",

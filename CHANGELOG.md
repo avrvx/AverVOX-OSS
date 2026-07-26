@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 - 2026-07-26
+
+- `avrvx --install-integration openclaw` suggested `clawhub package install`, which is not a ClawHub subcommand. OpenClaw plugins install through OpenClaw itself with `openclaw plugins install @avervox/openclaw-plugin`, which tries ClawHub and falls back to npm, where the plugin is published.
+
 ## 0.5.0 - 2026-07-26
 
 - Bridge CLI: `--voice` and `--speed` override the configured defaults for a single call, and `--capabilities` gained a `tts.voices` list so host applications can render a voice picker.
