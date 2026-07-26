@@ -110,7 +110,7 @@ def _hosts() -> dict[str, Host]:
             config=home / ".openclaw" / "openclaw.json",
             snippet_name="avervox.json5",
             snippet=OPENCLAW_SNIPPET,
-            plugin_hint="clawhub package install @avervox/openclaw-plugin",
+            plugin_hint="openclaw plugins install @avervox/openclaw-plugin",
         ),
     }
 
