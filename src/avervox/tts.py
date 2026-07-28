@@ -119,6 +119,92 @@ def clear_cache() -> None:
         _backends.clear()
 
 
+# Same voice + URL install.sh downloads for the pip/source install path, so
+# behavior matches regardless of how AverVOX was installed.
+_DEFAULT_PIPER_VOICE_NAME = "en_US-lessac-high.onnx"
+_DEFAULT_PIPER_VOICE_URL = (
+    "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+    "en/en_US/lessac/high/en_US-lessac-high.onnx"
+)
+_DEFAULT_PIPER_CONFIG_URL = _DEFAULT_PIPER_VOICE_URL + ".json"
+
+
+def _piper_voices_dir() -> Path:
+    return Path.home() / ".local" / "share" / "piper-tts" / "voices"
+
+
+def _download_to(url: str, dest: Path) -> None:
+    import httpx
+    with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
+        resp.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in resp.iter_bytes():
+                f.write(chunk)
+
+
+def ensure_default_voice_model(cfg) -> bool:
+    """Configure a default Piper voice on first run so TTS works out of the box.
+
+    install.sh (the pip/source install path) downloads a default Piper voice
+    (en_US-lessac-high, ~109 MB despite install.sh's own comment calling it
+    "~16 MB" — that appears to be stale/inaccurate) and writes it into
+    config.yaml. The AppImage build has no equivalent step, so Settings ->
+    TTS is left pointing at nothing on a fresh AppImage install — TTS
+    silently stays unconfigured until the user manually downloads and
+    selects a voice.
+
+    Mirrors wakeword.ensure_default_wakeword_model()'s idempotent, best-
+    effort approach: does nothing if a voice is already configured or one
+    already exists locally (respects the user's own choice), and downloads
+    the same default install.sh uses otherwise. Never raises —
+    a network hiccup here should not block startup; it just leaves TTS
+    unconfigured until Settings or the next launch. Returns True if `cfg`
+    was changed (caller is responsible for saving it).
+    """
+    tts_cfg = getattr(cfg, "tts", None)
+    if tts_cfg is None:
+        return False
+
+    if tts_cfg.voice_model and Path(tts_cfg.voice_model).expanduser().is_file():
+        return False
+
+    voices_dir = _piper_voices_dir()
+
+    # A voice already sitting in the standard directory (installed by
+    # install.sh previously, downloaded manually, or left over from an
+    # earlier run) takes priority over downloading a duplicate.
+    if voices_dir.is_dir():
+        existing = sorted(voices_dir.glob("*.onnx"))
+        if existing:
+            tts_cfg.voice_model = str(existing[0])
+            log.info("Found existing Piper voice, configuring: %s", existing[0])
+            return True
+
+    voices_dir.mkdir(parents=True, exist_ok=True)
+    dest = voices_dir / _DEFAULT_PIPER_VOICE_NAME
+    dest_json = voices_dir / (_DEFAULT_PIPER_VOICE_NAME + ".json")
+    try:
+        log.info("Downloading default Piper voice (%s, ~109 MB)...", _DEFAULT_PIPER_VOICE_NAME)
+        _download_to(_DEFAULT_PIPER_VOICE_URL, dest)
+        _download_to(_DEFAULT_PIPER_CONFIG_URL, dest_json)
+    except Exception as exc:
+        log.warning(
+            "Could not download default Piper voice (%s) — TTS will stay "
+            "unconfigured until a voice model is set in Settings.", exc,
+        )
+        for f in (dest, dest_json):
+            try:
+                if f.exists():
+                    f.unlink()
+            except OSError:
+                pass
+        return False
+
+    tts_cfg.voice_model = str(dest)
+    log.info("Configured default Piper voice: %s", dest)
+    return True
+
+
 def _resolve(
     voice: str | None = None, speed: float | None = None
 ) -> tuple[str, float]:
@@ -414,6 +500,19 @@ def speak_streamed(
     backend = _load_backend(resolved_voice)
     if backend is None:
         log.warning("TTS not available — no engine configured")
+        # `sentences` is frequently a *lazy* generator (see main.py's
+        # _do_stream_converse) whose iteration is what actually drives the
+        # LLM streaming call — sentences are only requested from the model
+        # as this function consumes them. Returning here without touching
+        # `sentences` at all meant the LLM was never called whenever TTS
+        # wasn't configured: Converse mode would transcribe speech, then
+        # silently skip straight to "no engine configured" and re-arm,
+        # with zero LLM traffic (GPU usage staying at 0%). Draining the
+        # iterator still runs the LLM call and lets the caller capture the
+        # full response text (for memory/transcript/HUD) — we just can't
+        # play it as audio.
+        for _ in sentences:
+            pass
         return
 
     _stop_event.clear()

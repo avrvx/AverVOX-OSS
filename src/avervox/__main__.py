@@ -20,7 +20,22 @@ import faulthandler
 import argparse
 from pathlib import Path
 
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# Only force GPUs invisible when the user's own config asks for CPU-only STT.
+# This used to be unconditional (`os.environ["CUDA_VISIBLE_DEVICES"] = ""`,
+# even overwriting a value the user had already exported themselves), which
+# silently defeated `stt.device: auto`/`cuda` (documented in README.md's/
+# DOCS.md's Performance Tuning tables): hiding every GPU here runs before
+# faster-whisper/ctranslate2 ever get a chance to probe for CUDA, so
+# `_resolve_device()`'s own auto-detection could never find one. If the user
+# hasn't set the env var and hasn't asked for `cpu` explicitly, leave GPU
+# visibility exactly as the shell/session already has it.
+if "CUDA_VISIBLE_DEVICES" not in os.environ:
+    try:
+        from .config import get_config as _get_config_early
+        if _get_config_early().stt.device == "cpu":
+            os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    except Exception:
+        pass  # Config not loadable yet (e.g. --doctor on a fresh install); leave GPUs visible.
 faulthandler.enable(file=sys.stderr, all_threads=True)
 
 signal.signal(signal.SIGPIPE, signal.SIG_DFL)

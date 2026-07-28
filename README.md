@@ -1,6 +1,6 @@
 # AverVOX OSS - Give your LLMs a voice.
 Website Edition
-version: 0.5.6
+version: 0.5.7
 
 Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus can receive your speech as text. Select text to have it read aloud. Hold free-form voice conversations with Large Language Models (LLMs) on Linux.
 
@@ -39,7 +39,7 @@ Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus
 | Conversation HUD | Yes | Yes |
 | Streaming TTS | Yes | Yes |
 | Kokoro TTS | | Yes |
-| TTS speed control | | Yes |
+| TTS speed control (Settings UI) | | Yes |
 | [Custom wake word](https://openwakeword.com/) | | Yes |
 | System prompts (per profile) | | Yes |
 | Session memory (survives restart) | | Yes |
@@ -67,7 +67,7 @@ This will:
 - Write an `avrvx` launcher to `~/.local/bin/`
 - Add desktop menu and autostart entries
 
-Alternatively, `pip install avrvx` installs the package (the PyPI package is named `avrvx`; `pip install avervox` also resolves to it via the alias package); you still need the system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for the full list.
+Alternatively, install with [pipx](https://pipx.pypa.io/) — `pipx install avrvx` (or `pipx install avervox` for the alias package) — which creates an isolated environment for you automatically. Plain `pip install avrvx` works too, but on Ubuntu 24.04, Debian 12+, and Linux Mint 22 the system Python is "externally managed" (PEP 668), so a bare `pip install` outside a virtual environment fails with `error: externally-managed-environment`. If you want plain `pip`, create a virtual environment first (`python3 -m venv ~/.venvs/avervox && source ~/.venvs/avervox/bin/activate && pip install avrvx`), or pass `--break-system-packages` at your own risk. Either way, you still need the system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for the full list.
 
 **New to AverVOX OSS?** See [QUICK_START-OSS.md](QUICK_START-OSS.md) for a guided tour of the tray app and every Settings tab.
 
@@ -215,7 +215,7 @@ Running `avrvx` with no flags launches the system-tray app described above.
 ## Converse
 
 - **How to start** - Press **Ctrl+Alt+C**.
-- **HUD pill** - A colour-coded pill indicator shows the current state:
+- **HUD pill** - A colour-coded pill indicator shows the current state (the same pill also appears during Dictate, e.g. "Dictate — Recording" / "Dictate — Transcribing…"):
   - **Red** = Listening
   - **Orange** = Processing
   - **Green** = Streaming response
@@ -391,14 +391,13 @@ Adjust **Settings -> Dictate** and **Settings -> Converse** to match your condit
 | `converse.end_of_turn_ms` | **1100** | 1500 | Settings -> Converse | Converse / `avrvx --listen`: end-of-turn delay. |
 | `rearm_delay_ms` | **250** | 500 | `config.yaml` -> `converse` | Pause after TTS before mic reopens (skipped when headphones confirmed). |
 | `silence_timeout_ms` | **7000** | 10000 | `config.yaml` -> `converse` | How long to wait with no speech before ending the conversation. |
-| STT `beam_size` | **1** | 5 | `stt.py` | Greedy (1) is faster; beam search (5) is more accurate for mumbled or technical speech. |
 | STT model | **base** | tiny / small | `config.yaml` -> `stt.model` | `tiny` is fastest, `small`/`medium` more accurate. `base` is a good middle ground. |
 
 **Tips:**
 
 - If Converse turns get clipped (cut off mid-sentence), increase `converse.end_of_turn_ms`.
 - If you hear echo (AverVOX OSS responding to its own TTS), increase `rearm_delay_ms`.
-- For the fastest possible turns at the cost of some accuracy, use `stt.model: tiny` with `beam_size: 1`.
+- For the fastest possible turns at the cost of some accuracy, use `stt.model: tiny`. (STT beam search width isn't user-configurable — `stt.py` automatically widens it for longer audio and stays greedy for short utterances.)
 
 ---
 
@@ -421,22 +420,20 @@ The first-token timer starts when AverVOX sends the chat/completions request. Th
 ### What happens on failure
 
 1. The in-flight request is aborted and the model is unloaded (LM Studio `/api/v1/models/unload`, or Ollama `keep_alive: 0`).
-2. The model is added to that endpoint's `disabled_models` in `config.yaml`, with the failure reason recorded.
+2. The model is added to the top-level `disabled_models` map in `config.yaml` (a sibling of `llm:`, not nested under it), with the failure reason recorded.
 3. AverVOX speaks a brief notice and suggests other enabled models on the same endpoint.
-4. The dashboard greys out the disabled model.
 
 ### Re-enabling a disabled model
 
 Disabled models stay off for the **rest of the current app session** (so a bad model is not retried immediately). **The next time you start AverVOX**, all `disabled_models` entries are cleared automatically and every model is available again.
 
-To re-enable during the same session without restarting, edit `~/.config/avervox/config.yaml` and remove the model from the endpoint's `disabled_models` map, then reload config from the tray menu:
+To re-enable during the same session without restarting, edit `~/.config/avervox/config.yaml` and remove the model from the top-level `disabled_models` map, then reload config from the tray menu:
 
 ```yaml
+disabled_models:
+  omnicoder-9b: no usable output within 30s   # delete this entry
 llm:
-  endpoints:
-    my-spark:
-      disabled_models:
-        omnicoder-9b: no usable output within 30s   # delete this entry
+  ...
 ```
 
 Only re-enable a model during the same session if you have fixed the underlying issue (VRAM, quantisation, server hang, etc.).

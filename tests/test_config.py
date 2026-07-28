@@ -52,7 +52,7 @@ class TestDefaultConfig:
 
     def test_default_audio(self):
         cfg = AppConfig()
-        assert cfg.audio.vad_aggressiveness == 1
+        assert cfg.audio.vad_aggressiveness == 2
 
     def test_default_dictate(self):
         cfg = AppConfig()
@@ -153,7 +153,7 @@ class TestLoadValidYAML:
         cfg = AppConfig.load(cfg_file)
 
         assert cfg.hotkeys.listen == "<ctrl>+<alt>+space"
-        assert cfg.audio.vad_aggressiveness == 1
+        assert cfg.audio.vad_aggressiveness == 2
         assert cfg.backends.text_inserter == "xdotool"
 
 
@@ -263,7 +263,7 @@ class TestMissingOrEmptyFile:
 
         assert isinstance(cfg, AppConfig)
         assert cfg.hotkeys.listen == "<ctrl>+<alt>+space"
-        assert cfg.audio.vad_aggressiveness == 1
+        assert cfg.audio.vad_aggressiveness == 2
 
     def test_whitespace_only_file_returns_defaults(self, tmp_path):
         cfg_file = tmp_path / "config.yaml"

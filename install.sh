@@ -136,6 +136,14 @@ EOF
 chmod +x "$LAUNCHER"
 echo "  ✓ Launcher written to $LAUNCHER"
 
+# `avervox` is a documented general-purpose alias for `avrvx` (both are
+# registered as console_scripts in pyproject.toml), but this installer
+# previously only ever wrote the `avrvx` launcher — the alias only existed
+# for a raw `pip install` into an environment that runs pyproject.toml's
+# entry points directly, not for this venv-based install path.
+ln -sf "$LAUNCHER" "$BIN_DIR/avervox"
+echo "  ✓ Alias 'avervox' -> $BIN_DIR/avervox"
+
 AUTOSTART_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 mkdir -p "$AUTOSTART_DIR"
 cat > "$AUTOSTART_DIR/avervox.desktop" << EOF

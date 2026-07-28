@@ -104,6 +104,10 @@ class AverVoxApp:
         )
         self._speech.preload()
 
+        if tts.ensure_default_voice_model(self._cfg):
+            self._cfg.save()
+            log.info("Configured default TTS voice: %s", self._cfg.tts.voice_model)
+
         tts.configure(voice_model=self._cfg.tts.voice_model)
         tts.preload()
 
@@ -392,8 +396,19 @@ class AverVoxApp:
     def _arm_converse_timer(self) -> None:
         """Start (or restart) the silence timeout for converse mode."""
         self._cancel_converse_timer()
+        timeout_ms = self._cfg.converse.silence_timeout_ms
+        if not isinstance(timeout_ms, (int, float)) or timeout_ms < 1000:
+            # Guards against an out-of-range value that predates the Settings
+            # dialog's own clamping fix (see settings.py's _spin()) — without
+            # this, a stored 0 ends every conversation instantly with
+            # "No speech for 0 s", before the user can say a word. Fix it on
+            # the config object itself (not just a local variable) so the
+            # "No speech for %d s" log line below reports accurately too.
+            log.warning("Invalid converse silence_timeout_ms %r — using default 7000", timeout_ms)
+            timeout_ms = 7000
+            self._cfg.converse.silence_timeout_ms = timeout_ms
         self._converse_timer_id = timeout_add(
-            self._cfg.converse.silence_timeout_ms, self._on_converse_silence_timeout,
+            timeout_ms, self._on_converse_silence_timeout,
         )
 
     def _cancel_converse_timer(self) -> None:

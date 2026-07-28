@@ -39,12 +39,43 @@ def _spin(grid: Gtk.Grid, row: int, label: str, value: float,
            lo: float, hi: float, step: float, digits: int = 1) -> Gtk.SpinButton:
     lbl = Gtk.Label(label=label, xalign=0)
     grid.attach(lbl, 0, row, 1, 1)
-    adj = Gtk.Adjustment(value=value, lower=lo, upper=hi,
+    # Passing an out-of-range `value=` to the Gtk.Adjustment constructor is
+    # only reliably clamped to [lo, hi] on some PyGObject builds — on others,
+    # a stored config value below `lo` (e.g. a leftover 0 from an old/buggy
+    # config) is accepted as-is, and Settings re-saves whatever the widget
+    # currently shows, perpetuating the out-of-range value forever.
+    # Gtk.Adjustment.set_value() is documented to always clamp to
+    # [lower, upper]; Gtk.SpinButton.set_value() was found to NOT reliably
+    # do so on some PyGObject builds even though it wraps the same
+    # adjustment — so set the value on the adjustment object directly.
+    adj = Gtk.Adjustment(lower=lo, upper=hi,
                          step_increment=step, page_increment=step * 5)
+    adj.set_value(value)
     spin = Gtk.SpinButton(adjustment=adj, digits=digits)
     spin.set_hexpand(True)
     grid.attach(spin, 1, row, 1, 1)
     return spin
+
+
+def _sane_default(value, floor: float, default: float):
+    """Substitute `default` for a numeric config value below its own valid
+    floor, before it ever reaches _spin().
+
+    A real corrupted config (e.g. a leftover 0 from the Gtk.Adjustment bug
+    _spin() itself now fixes — see above) can hold values like
+    converse.rearm_delay_ms=0 or dictate.interim_pause_ms=0, confirmed
+    together in one corrupted config.yaml in the wild. Gtk.Adjustment.
+    set_value() correctly clamps those to the field's own UI floor —
+    technically valid, but often a much more aggressive/unusual setting
+    than the documented default, and Settings always re-saves whatever the
+    widget currently shows, so a silently-clamped-to-floor value is just as
+    easy to lock back in as the original 0 was. Showing the real default
+    instead means Save persists something reasonable even if the field is
+    never touched.
+    """
+    if not isinstance(value, (int, float)) or value < floor:
+        return default
+    return value
 
 
 def _entry_labeled(grid: Gtk.Grid, row: int, label: str, value: str) -> Gtk.Entry:
@@ -177,9 +208,14 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
     profiles: dict[str, LLMProfile] = deepcopy(cfg.llm_profiles)
     active_key: list[str] = [cfg.llm_active]
 
-    dialog = Gtk.Dialog(title="AverVOX Settings", flags=Gtk.DialogFlags.MODAL)
-    dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                       Gtk.STOCK_SAVE, Gtk.ResponseType.OK)
+    dialog = Gtk.Dialog(title="AverVOX Settings", modal=True)
+    # add_button() (singular) is the core GI-generated Gtk.Dialog method and
+    # always present; add_buttons() (plural) is a PyGObject Python-overrides
+    # convenience wrapper that some newer PyGObject builds don't provide,
+    # raising AttributeError. Plain-text labels also sidestep Gtk.STOCK_*,
+    # which is deprecated. Same pattern as the working Activate dialog.
+    dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+    dialog.add_button("Save", Gtk.ResponseType.OK)
     dialog.set_default_size(520, 480)
     dialog.set_resizable(True)
 
@@ -463,7 +499,7 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
 
     s_dict_pause = _spin(
         g_dict, 2, "Interim pause (ms)",
-        float(cfg.dictate.interim_pause_ms),
+        _sane_default(float(cfg.dictate.interim_pause_ms), 500.0, 1000.0),
         500.0, 5000.0, 100.0, digits=0,
     )
     s_dict_vad = _spin(
@@ -490,11 +526,15 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
         float(cfg.converse.end_of_turn_ms),
         300.0, 3000.0, 50.0, digits=0,
     )
+    # A stored value below 1000 ms is corrupted (see main.py's matching
+    # runtime floor) rather than a deliberately tiny-but-valid setting —
+    # see _sane_default()'s docstring above for the full story (this exact
+    # field was confirmed corrupted to 0 in a real-world config.yaml).
     s_silence = _spin(g_conv, 1, "Silence timeout (sec)",
-                      cfg.converse.silence_timeout_ms / 1000,
+                      _sane_default(cfg.converse.silence_timeout_ms, 1000, 7000) / 1000,
                       1.0, 30.0, 1.0, digits=0)
     s_rearm = _spin(g_conv, 2, "Re-arm delay (ms)",
-                    float(cfg.converse.rearm_delay_ms),
+                    _sane_default(float(cfg.converse.rearm_delay_ms), 50.0, 250.0),
                     50.0, 2000.0, 50.0, digits=0)
 
     lbl_goodbye = Gtk.Label(label="Goodbye phrases (comma-separated)", xalign=0)
@@ -596,7 +636,7 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
         if hk_err:
             err_dlg = Gtk.MessageDialog(
                 transient_for=dialog,
-                flags=Gtk.DialogFlags.MODAL,
+                modal=True,
                 type=Gtk.MessageType.WARNING,
                 buttons=Gtk.ButtonsType.OK,
                 text="Invalid hotkey",

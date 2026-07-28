@@ -37,7 +37,7 @@ class TTSConfig:
 
 @dataclass
 class AudioConfig:
-    vad_aggressiveness: int = 1
+    vad_aggressiveness: int = 2
 
 
 @dataclass

@@ -1,7 +1,7 @@
 # AverVOX OSS - Documentation
 Technical reference for AverVOX OSS (free).
 Website Edition
-version: 0.5.6
+version: 0.5.7
 
 For a quick overview and install, see
 [README.md](README.md).
@@ -19,13 +19,14 @@ For a quick overview and install, see
 | Converse (`Ctrl+Alt+C`) | Yes | Yes |
 | CLI (`avrvx --listen`, `--speak`) | Yes | Yes |
 | Bridge CLI (`--synthesize`, `--transcribe`, `--capabilities`) | Yes | Yes |
+| Warm bridge daemon (`--daemon`) | Yes | Yes |
 | Piper TTS | Yes | Yes |
 | faster-whisper STT | Yes | Yes |
 | Voice interrupt | Yes | Yes |
 | Conversation HUD | Yes | Yes |
 | Streaming TTS | Yes | Yes |
 | Kokoro TTS | | Yes |
-| TTS speed control | | Yes |
+| TTS speed control (Settings UI) | | Yes |
 | Custom wake word | | Yes |
 | System prompts (per profile) | | Yes |
 | Session memory (survives restart) | | Yes |
@@ -64,10 +65,17 @@ on GitHub or PyPI. See [avervoxpro.com](https://avervoxpro.com/).
 The installer creates a Python venv at `~/.local/share/avervox/venv`, downloads
 the Piper voice model, and writes an `avrvx` launcher to `~/.local/bin/`.
 
-Alternatively, `pip install avrvx` installs the package (the PyPI package is
-named `avrvx`; `pip install avervox` also resolves to it via the alias
-package); you still need system dependencies (GTK, xdotool, xclip, portaudio) -
-see `install.sh` for the full list.
+Alternatively, install with [pipx](https://pipx.pypa.io/) — `pipx install
+avrvx` (or `pipx install avervox` for the alias package) — which creates an
+isolated environment automatically. Plain `pip install avrvx` works too, but
+on Ubuntu 24.04, Debian 12+, and Linux Mint 22 the system Python is
+"externally managed" (PEP 668), so a bare `pip install` outside a virtual
+environment fails with `error: externally-managed-environment`. Use a virtual
+environment (`python3 -m venv ~/.venvs/avervox && source
+~/.venvs/avervox/bin/activate && pip install avrvx`) if you want plain `pip`,
+or pass `--break-system-packages` at your own risk. Either way, you still need
+system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for
+the full list.
 
 ## GUI usage
 
@@ -134,7 +142,7 @@ visible to other users in the process list.
   "product": "avervox-oss",
   "edition": "oss",
   "licensed": true,
-  "version": "0.5.6",
+  "version": "0.5.7",
   "cli": "avrvx",
   "tts": {"engines": ["piper"], "active_engine": "piper", "synthesize_to_file": true, "formats": ["wav"],
           "voices": [{"engine": "piper", "id": "/home/you/.local/share/piper-tts/voices/en_US-lessac-high.onnx",
@@ -240,6 +248,8 @@ finishes.
 
 A colour-coded pill appears at the bottom-right of the screen during Converse
 mode so you always know whose turn it is (recording, processing, speaking).
+The same pill also appears during Dictate (e.g. "Dictate — Recording" /
+"Dictate — Transcribing…").
 
 ### State machine
 
@@ -383,15 +393,15 @@ defaults and conservative alternatives if the defaults feel too aggressive.
 | `converse.end_of_turn_ms` | **1100** | 1500 | Settings -> Converse | Converse / `avrvx --listen`: end-of-turn delay. |
 | `rearm_delay_ms` | **250** | 500 | `config.yaml` -> `converse` | Pause after TTS finishes before the mic reopens. Prevents echo/feedback. |
 | `silence_timeout_ms` | **7000** | 10000 | `config.yaml` -> `converse` | How long to wait with no speech before ending the conversation. |
-| STT `beam_size` | **1** | 5 | `stt.py` | Greedy (1) is faster; beam search (5) is more accurate for mumbled or technical speech. |
 | STT model | **base** | tiny / small | `config.yaml` -> `stt.model` | `tiny` is fastest, `small`/`medium` more accurate. `base` is a good middle ground. |
 
 **Tips:**
 
 - If Converse turns get clipped (cut off mid-sentence), increase `converse.end_of_turn_ms`.
 - If you hear echo (AverVOX OSS responding to its own TTS), increase `rearm_delay_ms`.
-- For the fastest possible turns at the cost of some accuracy, use `stt.model: tiny`
-  with `beam_size: 1`.
+- For the fastest possible turns at the cost of some accuracy, use `stt.model: tiny`.
+  (STT beam search width isn't user-configurable — `stt.py` automatically widens it
+  for longer audio and stays greedy for short utterances.)
 
 ## LLM model health & failure detection
 
