@@ -364,8 +364,9 @@ def check_edition(cfg) -> list[Result]:
     else:
         results.append(Result(INFO, "edition",
                               f"AverVOX OSS {__version__} — Pro adds Kokoro "
-                              "TTS, wake word, session memory, and LAN mode "
-                              "(avervoxpro.com)"))
+                              "voices, wake word, persistent sessions, "
+                              "transcripts, and a LAN voice server: "
+                              "https://www.avervoxpro.com/pricing/"))
     return results
 
 

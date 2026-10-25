@@ -31,8 +31,8 @@ _WHISPER_MODELS: tuple[tuple[str, str], ...] = (
 
 _ICON_TEST = "\u21bb"      # ↻  circular arrow
 
-# Pro purchase page — see LINKS.md.
-_PRO_UPGRADE_URL = "https://avervoxpro.com/"
+# Pro comparison page (OSS vs Pro) — see LINKS.md.
+_PRO_UPGRADE_URL = "https://www.avervoxpro.com/pricing/"
 
 
 def _spin(grid: Gtk.Grid, row: int, label: str, value: float,
@@ -231,13 +231,14 @@ def show_settings_dialog(initial_tab: str | None = None) -> None:
     bar_content = upgrade_bar.get_content_area()
     lbl_upgrade = Gtk.Label()
     lbl_upgrade.set_markup(
-        "Please consider upgrading to <b>AverVOX Pro</b>"
-        " to support ongoing development &amp; maintenance."
+        "<b>AverVOX Pro</b> adds natural Kokoro voices, hands-free wake word,"
+        " sessions that survive restarts, transcripts and dictation logs,"
+        " and a LAN voice server. One-time $39, no subscription."
     )
     lbl_upgrade.set_xalign(0.0)
     lbl_upgrade.set_line_wrap(True)
     bar_content.pack_start(lbl_upgrade, True, True, 0)
-    btn_pro = Gtk.LinkButton(uri=_PRO_UPGRADE_URL, label="Upgrade to Pro \u2192")
+    btn_pro = Gtk.LinkButton(uri=_PRO_UPGRADE_URL, label="See what Pro adds \u2192")
     bar_content.pack_start(btn_pro, False, False, 0)
     box.pack_start(upgrade_bar, False, False, 0)
 
