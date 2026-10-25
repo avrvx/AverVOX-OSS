@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.8 - 2026-10-25
+
+- Supports Python 3.10 and 3.11 (`requires-python` lowered from `>=3.12` to `>=3.10`), so the system Python on Ubuntu 22.04 and Linux Mint 21 works. Verified on Ubuntu 22.04.5 (Python 3.10.12, PyGObject 3.42.1): full test suite passes, clean pipx and `install.sh` installs, and `avrvx --doctor` reports all Python packages importable.
+- Fixes `glib_compat.clipboard_set_text()` raising `TypeError: Gtk.Clipboard.set_text() takes exactly 3 arguments (2 given)` on PyGObject < 3.50 (Mint 21/22, Ubuntu 22.04/24.04). `Gtk.Clipboard.set_text` has no PyGObject override, so the length argument is mandatory on every version; it now always passes `-1`. The tray's "Copy Last Response" previously fell back to xclip, so the visible impact was small.
+- Switches the voice-activity-detection dependency from `webrtcvad` to `webrtcvad-wheels>=2.0.14` (same `import webrtcvad` module). `webrtcvad` is source-only, so installing it needed `python3-dev` and a C compiler, and it imported `pkg_resources`, which fails in plain pipx environments without setuptools.
+- Fixes the pipx instructions in README/DOCS: they now use `pipx install --system-site-packages avrvx` (and the same for the `avervox` alias, and `--system-site-packages` for the manual venv example). Without it the environment cannot see the system PyGObject (`python3-gi`) and the tray app fails with `ModuleNotFoundError: No module named 'gi'`.
+- Documents `pulseaudio-utils` (provides `parec`, used for mic capture) as a runtime requirement in README/DOCS/requirements.txt. It is preinstalled on most Mint/Ubuntu desktops and is not installed by `install.sh`.
+- `install.sh` header now says it targets Linux Mint 21/22 and Ubuntu 22.04/24.04.
+- Clearer OSS vs Pro information: README gains a "When Pro is worth it" section; the Settings upgrade bar now lists what Pro adds and links to the OSS/Pro comparison page (https://www.avervoxpro.com/pricing/); `avrvx --doctor`'s edition line links there too.
+
 ## 0.5.7 - 2026-07-27
 
 - Fixes the Settings dialog not opening at all on newer PyGObject: `Gtk.Dialog(..., flags=Gtk.DialogFlags.MODAL)` raises `TypeError: gobject 'GtkDialog' doesn't support property 'flags'` on PyGObject 3.50+, which dropped the legacy shim that let `flags=` be passed as a constructor keyword. Replaced with the `modal=True` constructor keyword in the Settings dialog and its "invalid hotkey" validation popup.
