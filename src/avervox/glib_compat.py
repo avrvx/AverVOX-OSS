@@ -36,7 +36,7 @@ def text_buffer_set_text(buf, text: str) -> None:
 
 
 def clipboard_set_text(clipboard, text: str) -> None:
-    if _PYGOBJECT_NEW:
-        clipboard.set_text(text, -1)
-    else:
-        clipboard.set_text(text)
+    # Gtk.Clipboard.set_text(text, len) has no PyGObject override: the length
+    # argument is mandatory on every PyGObject version (3.42 raises TypeError
+    # "takes exactly 3 arguments (2 given)" without it). -1 = NUL-terminated.
+    clipboard.set_text(text, -1)
