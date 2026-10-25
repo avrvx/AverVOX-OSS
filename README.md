@@ -46,7 +46,19 @@ Add voice to any OpenAI-compatible endpoint, local or remote. Any app with focus
 | LAN client/server (`avrvx --serve`) | | Yes |
 | Dashboard (endpoints, models, profiles) | | Yes |
 
-AverVOX OSS is free and open-source. For issues and questions, please open an issue on the project repository. If you want the Pro-only features above (Kokoro TTS, wake word, session memory, LAN, and more), see [AverVOX Pro](https://avervoxpro.com/) - a one-time, no-subscription companion app, distributed separately (not on GitHub or PyPI).
+AverVOX OSS is free, MIT-licensed, and not time-limited. For issues and questions, please open an issue on this repository.
+
+### When Pro is worth it
+
+Pro is for people who use voice all day. It is a separate x86_64 AppImage, a **one-time $39** purchase with no subscription and all version 1 updates, and it uses the same commands and bridge contract as OSS. It adds:
+
+- **Natural Kokoro voices** with speed control, alongside Piper
+- **Hands-free wake word** instead of a hotkey for every turn
+- **Persistent sessions and per-profile personas** — conversations that survive a restart
+- **Transcripts and daily dictation logs** kept locally
+- **LAN voice server and dashboard** (`avrvx --serve`) to share one speech host across machines
+
+Use OSS first to confirm your desktop, audio, and LLM endpoint work. Then **[compare OSS and Pro →](https://www.avervoxpro.com/pricing/)**
 
 ---
 
@@ -67,7 +79,9 @@ This will:
 - Write an `avrvx` launcher to `~/.local/bin/`
 - Add desktop menu and autostart entries
 
-Alternatively, install with [pipx](https://pipx.pypa.io/) — `pipx install avrvx` (or `pipx install avervox` for the alias package) — which creates an isolated environment for you automatically. Plain `pip install avrvx` works too, but on Ubuntu 24.04, Debian 12+, and Linux Mint 22 the system Python is "externally managed" (PEP 668), so a bare `pip install` outside a virtual environment fails with `error: externally-managed-environment`. If you want plain `pip`, create a virtual environment first (`python3 -m venv ~/.venvs/avervox && source ~/.venvs/avervox/bin/activate && pip install avrvx`), or pass `--break-system-packages` at your own risk. Either way, you still need the system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for the full list.
+`install.sh` does not install `pulseaudio-utils` (it provides `parec`, used for mic capture). It is preinstalled on most Mint/Ubuntu desktops; if `avrvx --doctor` reports it missing, run `sudo apt install pulseaudio-utils`.
+
+Alternatively, install with [pipx](https://pipx.pypa.io/) — `pipx install --system-site-packages avrvx` (or `pipx install --system-site-packages avervox` for the alias package) — which creates an isolated environment for you automatically. `--system-site-packages` is required: it lets that environment see the system PyGObject (`python3-gi`), which is installed with apt, not pip. Plain `pip install avrvx` works too, but on Ubuntu 24.04, Debian 12+, and Linux Mint 22 the system Python is "externally managed" (PEP 668), so a bare `pip install` outside a virtual environment fails with `error: externally-managed-environment`. If you want plain `pip`, create a virtual environment first (`python3 -m venv --system-site-packages ~/.venvs/avervox && source ~/.venvs/avervox/bin/activate && pip install avrvx`), or pass `--break-system-packages` at your own risk. Either way, you still need the system dependencies (GTK, xdotool, xclip, portaudio, pulseaudio-utils) - see `install.sh` and System Requirements below for the full list.
 
 **New to AverVOX OSS?** See [QUICK_START-OSS.md](QUICK_START-OSS.md) for a guided tour of the tray app and every Settings tab.
 
@@ -365,8 +379,8 @@ Most users only need to edit the **llm** section, and the Settings dialog handle
 ## System Requirements
 
 - Linux Mint 21/22 or Ubuntu 22.04/24.04 (X11 or XWayland)
-- PulseAudio **or** PipeWire
-- Python 3.12+
+- PulseAudio **or** PipeWire, plus `pulseaudio-utils` (provides `parec`; preinstalled on most desktops, `sudo apt install pulseaudio-utils` otherwise)
+- Python 3.10+ (the system Python on Ubuntu 22.04 / Linux Mint 21 works)
 
 ---
 

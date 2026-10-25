@@ -66,16 +66,21 @@ The installer creates a Python venv at `~/.local/share/avervox/venv`, downloads
 the Piper voice model, and writes an `avrvx` launcher to `~/.local/bin/`.
 
 Alternatively, install with [pipx](https://pipx.pypa.io/) — `pipx install
-avrvx` (or `pipx install avervox` for the alias package) — which creates an
-isolated environment automatically. Plain `pip install avrvx` works too, but
+--system-site-packages avrvx` (or `pipx install --system-site-packages avervox`
+for the alias package) — which creates an isolated environment automatically.
+`--system-site-packages` is required: it lets that environment see the
+system PyGObject (`python3-gi`), which is installed with apt, not pip. Plain `pip install avrvx` works too, but
 on Ubuntu 24.04, Debian 12+, and Linux Mint 22 the system Python is
 "externally managed" (PEP 668), so a bare `pip install` outside a virtual
 environment fails with `error: externally-managed-environment`. Use a virtual
-environment (`python3 -m venv ~/.venvs/avervox && source
+environment (`python3 -m venv --system-site-packages ~/.venvs/avervox && source
 ~/.venvs/avervox/bin/activate && pip install avrvx`) if you want plain `pip`,
 or pass `--break-system-packages` at your own risk. Either way, you still need
 system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for
-the full list.
+the full list - plus `pulseaudio-utils` (provides `parec`, used for mic
+capture; preinstalled on most Mint/Ubuntu desktops, not installed by
+`install.sh`: `sudo apt install pulseaudio-utils` if `avrvx --doctor` reports
+it missing).
 
 ## GUI usage
 

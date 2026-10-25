@@ -8,7 +8,7 @@ version = "0.5.7"
 description = "Give your LLMs a voice. Dictate, speak, and converse with any OpenAI-compatible LLM from a global hotkey on Linux."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 authors = [
     { name = "Carl E. Hartung" },
 ]
@@ -19,12 +19,14 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 dependencies = [
     "sounddevice>=0.4.6",
-    "webrtcvad>=2.0.10",
+    "webrtcvad-wheels>=2.0.14",
     "faster-whisper>=1.0.0",
     "piper-tts>=1.2.0",
     "httpx>=0.27",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # AverVOX — LLM Speech Bridge installer
 # Add voice to any LLM using an OpenAI-compatible endpoint.
-# Target: Linux Mint 22.x / Ubuntu 24.04
+# Target: Linux Mint 21/22, Ubuntu 22.04/24.04
 # Usage: bash install.sh
 
 set -euo pipefail
