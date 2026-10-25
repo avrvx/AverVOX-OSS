@@ -9,6 +9,7 @@
 - Documents `pulseaudio-utils` (provides `parec`, used for mic capture) as a runtime requirement in README/DOCS/requirements.txt. It is preinstalled on most Mint/Ubuntu desktops and is not installed by `install.sh`.
 - `install.sh` header now says it targets Linux Mint 21/22 and Ubuntu 22.04/24.04.
 - `install.sh` now installs `python3-dev`, and README/DOCS/requirements.txt list it as a system dependency. `pynput` depends on `evdev`, which ships no prebuilt wheels, so installing AverVOX compiles it and fails with `Python.h: No such file or directory` when the Python headers are missing (seen on a minimal Ubuntu 22.04).
+- `avrvx --doctor`'s hints for a missing `parec` now say to install `pulseaudio-utils` with the package manager (`sudo apt install pulseaudio-utils`) instead of suggesting `install.sh`, which does not install it.
 - Clearer OSS vs Pro information: README gains a "When Pro is worth it" section; the Settings upgrade bar now lists what Pro adds and links to the OSS/Pro comparison page (https://www.avervoxpro.com/pricing/); `avrvx --doctor`'s edition line links there too.
 
 ## 0.5.7 - 2026-07-27

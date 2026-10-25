@@ -119,8 +119,8 @@ def check_system_binaries() -> Result:
     missing_optional = [b for b in OPTIONAL_BINARIES if not shutil.which(b)]
     if missing:
         return Result(FAIL, "system binaries", f"missing: {', '.join(missing)}",
-                      "Install them (Mint/Ubuntu: apt install xdotool xclip "
-                      "pulseaudio-utils) or run install.sh.")
+                      "Install them with your package manager (Mint/Ubuntu: "
+                      "sudo apt install xdotool xclip pulseaudio-utils).")
     if missing_optional:
         return Result(WARN, "system binaries",
                       f"required tools present; missing: {', '.join(missing_optional)}",
@@ -149,8 +149,9 @@ def check_python_deps() -> Result:
 def check_microphone() -> Result:
     if not shutil.which("parec"):
         return Result(FAIL, "microphone", "parec is not installed",
-                      "Install pulseaudio-utils; AverVOX records through "
-                      "PulseAudio/PipeWire.")
+                      "Install pulseaudio-utils with your package manager "
+                      "(Mint/Ubuntu: sudo apt install pulseaudio-utils); "
+                      "AverVOX records through PulseAudio/PipeWire.")
     argv = ["parec", "--format=s16le", "--rate=16000", "--channels=1"]
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE,
