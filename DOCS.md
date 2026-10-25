@@ -76,8 +76,9 @@ environment fails with `error: externally-managed-environment`. Use a virtual
 environment (`python3 -m venv --system-site-packages ~/.venvs/avervox && source
 ~/.venvs/avervox/bin/activate && pip install avrvx`) if you want plain `pip`,
 or pass `--break-system-packages` at your own risk. Either way, you still need
-system dependencies (GTK, xdotool, xclip, portaudio) - see `install.sh` for
-the full list - plus `pulseaudio-utils` (provides `parec`, used for mic
+system dependencies (GTK, xdotool, xclip, portaudio, python3-dev) - see
+`install.sh` for the full list; `python3-dev` provides the Python headers
+needed to compile `evdev`, a `pynput` dependency - plus `pulseaudio-utils` (provides `parec`, used for mic
 capture; preinstalled on most Mint/Ubuntu desktops, not installed by
 `install.sh`: `sudo apt install pulseaudio-utils` if `avrvx --doctor` reports
 it missing).

@@ -8,6 +8,7 @@
 - Fixes the pipx instructions in README/DOCS: they now use `pipx install --system-site-packages avrvx` (and the same for the `avervox` alias, and `--system-site-packages` for the manual venv example). Without it the environment cannot see the system PyGObject (`python3-gi`) and the tray app fails with `ModuleNotFoundError: No module named 'gi'`.
 - Documents `pulseaudio-utils` (provides `parec`, used for mic capture) as a runtime requirement in README/DOCS/requirements.txt. It is preinstalled on most Mint/Ubuntu desktops and is not installed by `install.sh`.
 - `install.sh` header now says it targets Linux Mint 21/22 and Ubuntu 22.04/24.04.
+- `install.sh` now installs `python3-dev`, and README/DOCS/requirements.txt list it as a system dependency. `pynput` depends on `evdev`, which ships no prebuilt wheels, so installing AverVOX compiles it and fails with `Python.h: No such file or directory` when the Python headers are missing (seen on a minimal Ubuntu 22.04).
 - Clearer OSS vs Pro information: README gains a "When Pro is worth it" section; the Settings upgrade bar now lists what Pro adds and links to the OSS/Pro comparison page (https://www.avervoxpro.com/pricing/); `avrvx --doctor`'s edition line links there too.
 
 ## 0.5.7 - 2026-07-27

@@ -3,6 +3,7 @@
 # Python dependencies (install into venv via install.sh)
 #
 # System packages (installed via apt):
+#   python3-dev (Python headers, needed to compile evdev, a pynput dependency)
 #   python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1
 #   libgirepository1.0-dev gir1.2-glib-2.0
 #   portaudio19-dev libportaudio2

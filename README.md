@@ -72,7 +72,7 @@ bash install.sh
 
 This will:
 
-- Install the required system packages (PyGObject, PortAudio, xdotool, xclip)
+- Install the required system packages (PyGObject, PortAudio, xdotool, xclip, python3-dev)
 - Create a Python virtual environment under `~/.local/share/avervox/`
 - Install all required Python packages
 - Download the Piper voice model
@@ -81,7 +81,7 @@ This will:
 
 `install.sh` does not install `pulseaudio-utils` (it provides `parec`, used for mic capture). It is preinstalled on most Mint/Ubuntu desktops; if `avrvx --doctor` reports it missing, run `sudo apt install pulseaudio-utils`.
 
-Alternatively, install with [pipx](https://pipx.pypa.io/) — `pipx install --system-site-packages avrvx` (or `pipx install --system-site-packages avervox` for the alias package) — which creates an isolated environment for you automatically. `--system-site-packages` is required: it lets that environment see the system PyGObject (`python3-gi`), which is installed with apt, not pip. Plain `pip install avrvx` works too, but on Ubuntu 24.04, Debian 12+, and Linux Mint 22 the system Python is "externally managed" (PEP 668), so a bare `pip install` outside a virtual environment fails with `error: externally-managed-environment`. If you want plain `pip`, create a virtual environment first (`python3 -m venv --system-site-packages ~/.venvs/avervox && source ~/.venvs/avervox/bin/activate && pip install avrvx`), or pass `--break-system-packages` at your own risk. Either way, you still need the system dependencies (GTK, xdotool, xclip, portaudio, pulseaudio-utils) - see `install.sh` and System Requirements below for the full list.
+Alternatively, install with [pipx](https://pipx.pypa.io/) — `pipx install --system-site-packages avrvx` (or `pipx install --system-site-packages avervox` for the alias package) — which creates an isolated environment for you automatically. `--system-site-packages` is required: it lets that environment see the system PyGObject (`python3-gi`), which is installed with apt, not pip. Plain `pip install avrvx` works too, but on Ubuntu 24.04, Debian 12+, and Linux Mint 22 the system Python is "externally managed" (PEP 668), so a bare `pip install` outside a virtual environment fails with `error: externally-managed-environment`. If you want plain `pip`, create a virtual environment first (`python3 -m venv --system-site-packages ~/.venvs/avervox && source ~/.venvs/avervox/bin/activate && pip install avrvx`), or pass `--break-system-packages` at your own risk. Either way, you still need the system dependencies (GTK, xdotool, xclip, portaudio, pulseaudio-utils, python3-dev) - see `install.sh` and System Requirements below for the full list. `python3-dev` provides the Python headers needed to compile `evdev` (a `pynput` dependency that ships no prebuilt wheels); without it the install fails with `Python.h: No such file or directory`.
 
 **New to AverVOX OSS?** See [QUICK_START-OSS.md](QUICK_START-OSS.md) for a guided tour of the tray app and every Settings tab.
 
@@ -381,6 +381,7 @@ Most users only need to edit the **llm** section, and the Settings dialog handle
 - Linux Mint 21/22 or Ubuntu 22.04/24.04 (X11 or XWayland)
 - PulseAudio **or** PipeWire, plus `pulseaudio-utils` (provides `parec`; preinstalled on most desktops, `sudo apt install pulseaudio-utils` otherwise)
 - Python 3.10+ (the system Python on Ubuntu 22.04 / Linux Mint 21 works)
+- `python3-dev` (Python headers, needed to compile `evdev`, a `pynput` dependency; installed by `install.sh`, otherwise `sudo apt install python3-dev`)
 
 ---
 

@@ -23,7 +23,7 @@ echo ""
 echo "[1/6] Installing system packages…"
 sudo apt-get update -qq
 sudo apt-get install -y \
-    python3 python3-pip python3-venv \
+    python3 python3-pip python3-venv python3-dev \
     python3-gi python3-gi-cairo \
     gir1.2-gtk-3.0 gir1.2-glib-2.0 \
     gir1.2-appindicator3-0.1 \
